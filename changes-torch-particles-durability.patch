@@ -1,0 +1,1483 @@
+--- a/index.html
++++ b/index.html
+@@ -195,6 +195,13 @@
+     position: absolute; right: 3px; bottom: 2px; font: 11px/1 "SF Mono", monospace;
+     color: #fff; text-shadow: 1px 1px 0 #000; pointer-events: none;
+   }
++  .durability {
++    position: absolute; left: 7px; right: 7px; bottom: 3px; height: 4px;
++    background: rgba(10, 20, 21, .86); border: 1px solid rgba(0, 0, 0, .5);
++    border-radius: 2px; overflow: hidden; pointer-events: none;
++  }
++  .durability i { display: block; height: 100%; border-radius: 1px; }
++  .invSlot .durability { left: 5px; right: 5px; bottom: 3px; }
+   .invItem {
+     padding: 10px 4px 7px; border-radius: 4px; cursor: pointer; text-align: center;
+     background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.10); transition: background .12s, border-color .12s, transform .08s;
+@@ -466,6 +473,7 @@
+     <div class="row" id="metaRow">
+       <button class="btn ghost" id="newWorld">新世界</button>
+       <button class="btn ghost" id="shadowBtn">阴影：开</button>
++      <button class="btn ghost" id="particleBtn">粒子：开</button>
+       <span class="seed" id="seedLabel"></span>
+     </div>
+ 
+@@ -512,7 +520,7 @@
+       <div id="invHotbar" class="slotGrid hotbarRow"></div>
+     </div>
+     <div id="creativePane" class="hide">
+-      <div class="creativeHint">点物品拿一叠到手上，再点背包格子放下</div>
++      <div class="creativeHint">创造页：无限领取物品 · 点物品拿起，再点背包格子放下</div>
+       <div id="creativeGrid" class="slotGrid creative"></div>
+     </div>
+     <div class="invFoot">
+@@ -529,7 +537,7 @@
+ 
+ <div id="craft" class="hide">
+   <div class="craftPanel">
+-    <div class="invTitle">合成台<small>点配方自动摆放 · 点成品取走 · E 或 Esc 关闭</small></div>
++    <div class="invTitle">合成台<small>点配方预览 · 点成品时从背包扣材料 · E 或 Esc 关闭</small></div>
+     <div class="craftRow">
+       <div id="craftGrid" class="craftGrid"></div>
+       <div class="craftArrow">→</div>
+@@ -541,7 +549,7 @@
+       <div class="craftPalette" id="craftPalette"></div>
+     </div>
+     <div class="invFoot">
+-      <span>材料无限 · 成品直接放进当前快捷栏</span>
++      <span>材料从背包扣除 · 成品放入背包 · 创造页可领取材料</span>
+       <button class="btn ghost" id="craftClose">关闭</button>
+     </div>
+   </div>
+@@ -552,16 +560,17 @@
+ <div id="err"></div>
+ 
+ <script src="js/noise.js?v=58"></script>
+-<script src="js/blocks.js?v=58"></script>
+-<script src="js/world.js?v=58"></script>
+-<script src="js/mesher.js?v=58"></script>
+-<script src="js/renderer.js?v=58"></script>
++<script src="js/blocks.js?v=59"></script>
++<script src="js/world.js?v=59"></script>
++<script src="js/mesher.js?v=59"></script>
++<script src="js/renderer.js?v=59"></script>
++<script src="js/particles.js?v=59"></script>
+ <script src="js/viewmodel.js?v=58"></script>
+ <script src="js/player.js?v=58"></script>
+-<script src="js/items.js?v=58"></script>
+-<script src="js/crafting.js?v=58"></script>
++<script src="js/items.js?v=59"></script>
++<script src="js/crafting.js?v=59"></script>
+ <script src="js/mobs.js?v=58"></script>
+-<script src="js/minimap.js?v=58"></script>
+-<script src="js/main.js?v=58"></script>
++<script src="js/minimap.js?v=59"></script>
++<script src="js/main.js?v=59"></script>
+ </body>
+ </html>
+--- a/README.md
++++ b/README.md
+@@ -77,9 +77,9 @@
+ - **视距 7 区块**（约 112 格），更远的山和海能一起入镜
+ - **地下洞穴**：3D 噪声等值面挖出的蜿蜒隧道与溶洞
+ - **生物**：羊、鸡、牛、猪和兔子按地形出现，会随机漫步、撞墙起跳、掉进水里会浮起来；有碰撞体、血量、受击闪红和击退，击败后获得羊毛、羽毛、生牛肉、生猪肉或皮革；最多同时 14 只，走远自动回收
+-- **物品体系**：79 件物品 —— 38 种方块（含 5 种矿石）、16 种材料/食物、25 把工具（木/石/铁/金/钻石 × 镐/斧/锹/剑/锄），全部有 16×16 程序化图标
+-- **合成台**：摆放后右键打开 3×3 合成界面，35 条配方（含樱花木板/木棍/合成台与 25 把工具），左侧配方一键摆放，成品直接进快捷栏
+-- **挖掘与工具**：按方块硬度 + 工具类型计算挖掘时间，十字准星下有进度条；镐挖石头、斧砍木头、锹铲土、剑割树叶，裸手慢 4~9 倍
++- **物品体系**：80 件物品 —— 39 种方块（含火把）、16 种材料/食物、25 把工具（木/石/铁/金/钻石 × 镐/斧/锹/剑/锄），全部有 16×16 程序化图标
++- **合成台**：摆放后右键打开 3×3 合成界面，36 条配方；左侧配方一键预览，点成品时检查并扣除背包材料，产物进入背包。煤炭 + 木棍可合成 4 根火把
++- **挖掘与工具**：按方块硬度 + 工具类型计算挖掘时间，十字准星下有进度条；工具有耐久，挖掘与剑攻击消耗 1 点，归零损坏
+ - **放置消耗**：放方块会消耗快捷栏里的数量，用完变空；材料可以从背包挪过来或去创造页补
+ - **透光树叶**：树叶贴图带镂空 alpha，能透过树冠看到天空和树干，树影下也不会完全闷死
+ - **水下视角**：进到水面以下会切到蓝雾 + 短视距，屏幕加一层水色，水面从下往上也可见，音效同时变闷；浮出水面自动恢复
+@@ -89,7 +89,8 @@
+   叶片镂空也会投出对应阴影；阴影投影吸附纹素以减少镜头移动时的抖动，暂停页可关闭阴影
+ - **区块流式加载**：视距 7 区块，按距离优先级生成/网格化/卸载，边玩边加载
+ - **网格优化**：面剔除 + 环境光遮蔽（AO）+ 天空深度衰减，十万级面也能跑满帧
+-- **阴影**：顶点带法线，主着色器按世界坐标采样深度贴图，PCF 3×3 软化边缘
++- **火把光照**：14 级方块光只在放置、挖掉或新区块加载时传播；夜晚和洞穴中可照亮周围，石墙会阻挡光传播
++- **粒子**：挖掘碎屑、脚步扬尘、水花与生物受击粒子共用 512 个槽位和一次 WebGL 绘制；暂停页可关闭
+ - **完整生存物理**：AABB 分轴碰撞、跳跃、游泳浮力、飞行，65° 垂直视野与轻微疾跑视野变化
+ - **交互**：体素射线拾取、方块高亮线框、挖掘/放置、长按连续操作
+ - **画面**：程序化像素纹理图集、昼夜渐变天空、日落、月亮、星空、方块状薄云、匹配天空的距离雾
+@@ -114,22 +115,22 @@
+     ├── minimap.js    逐帧绘制地形概览、玩家方向与雪山标记
+     ├── mesher.js     面剔除 + AO 顶点烘焙 + 天空深度，输出交错的顶点/索引缓冲
+     ├── renderer.js   原生 WebGL2：着色器、视锥剔除、透明批次、天空/云、线框
++    ├── particles.js  512 粒子池、运动与一次点精灵绘制
+     ├── viewmodel.js  空手时的第一人称手臂与动画
+     ├── player.js     AABB 碰撞、水中/飞行、DDA 体素射线
+     ├── items.js      物品注册表、材料与 25 把工具的程序化图标
+-    ├── crafting.js   35 条配方 + 3×3 形状匹配
+-    ├── mobs.js       羊/鸡的盒子模型、走跳动画、随机漫步 AI、生成与回收
++    ├── crafting.js   36 条配方 + 3×3 形状匹配
++    ├── mobs.js       羊/鸡/牛/猪/兔子的盒子模型、走跳动画、随机漫步 AI、生成与回收
+     └── main.js       启动流程、输入、区块调度、挖掘放置、存档、音效、HUD
+ ```
+ 
+ 几个关键设计：
+ 
+ - **区块数据**用 `Uint8Array(16×16×144)`，一个方块 1 字节；渲染时每个区块合并成一个
+-  `VAO + 交织顶点缓冲`（位置 3 + UV 2 + 光照 1），只在方块变化时重建。
++  `VAO + 交织顶点缓冲`（位置 3 + UV 2 + AO/面向亮度 1 + 法线 3 + 方块光 1），只在方块或光照变化时重建。
+ - **AO** 在每个面的四个角采样 8 个邻居，直接乘进顶点光照，配合顶/侧/底三种面向亮度，
+   不增加任何运行时开销。
+-- **光照模型**：网格顶点烘焙 AO 与地下衰减，片元着色器实时计算太阳/月亮方向和阴影；
+-  目前没有火把等方块光源的传播。
++- **光照模型**：网格顶点烘焙 AO、地下衰减和火把光；片元着色器实时计算太阳/月亮方向和阴影。
+ - **纹理**全部由 `ImageData` 逐像素画出来（16×16 一盘，16×16 图集），图集留半像素内缩，
+   NEAREST 采样保持像素风；水做了低对比度处理，避免大面积水面出现摩尔纹。
+ - **群系**：每 3×3 个区域覆盖全部已实现的地表景观，并用低频噪声扭曲边界、平滑混合地形高度；交界处的沙、雪和红沙会以斑块渐变；雪原临海会形成冻洋。
+@@ -157,8 +158,8 @@
+ 不可能全做，这里覆盖的是**能玩起来的核心集合**：全部可放置方块 + 五种矿石 + 常用材料/食物 +
+ 完整的两套工具树（25 把）。物品表是数据驱动的，`js/items.js` 里加一条 `def({...})` 就能扩展。
+ 
+-物品栏是创造模式（无限材料），所以合成台更偏向「配方展示 + 实际合成工具」：点左侧配方会自动
+-摆好材料，点成品就能拿到工具，工具会真的影响挖掘速度。
++背包会收进挖掘所得，放置会消耗快捷栏物品。创造页可以无限领取物品。合成台左侧配方只负责
++预览摆放，点成品时从背包扣除材料；材料不足会显示缺少的物品与数量。
+ 
+ ## 关于「用原版材质」
+ 
+--- a/js/blocks.js
++++ b/js/blocks.js
+@@ -150,6 +150,22 @@
+       const v = rng() < 0.5 ? 2 : -2;
+       set(d, x, y, P.water[0][0] + v, P.water[0][1] + v, P.water[0][2] + v * 2, 190);
+     }
++  });
++
++  tile('torch_side', (d) => {
++    for (let y = 2; y < 16; y++) for (let x = 6; x <= 9; x++) {
++      const c = y < 6 ? [75, 63, 52] : (x < 8 ? [137, 93, 49] : [96, 65, 38]);
++      set(d, x, y, c[0], c[1], c[2]);
++    }
++    for (let y = 0; y < 5; y++) for (let x = 5 + (y > 2 ? 1 : 0); x <= 10 - (y > 2 ? 1 : 0); x++) {
++      const c = y < 2 ? [255, 230, 113] : [255, 153, 39];
++      set(d, x, y, c[0], c[1], c[2]);
++    }
++    set(d, 7, 0, 255, 251, 186); set(d, 8, 0, 255, 251, 186);
++  });
++  tile('torch_top', (d) => {
++    fill(d, [255, 196, 67]);
++    for (let y = 4; y < 12; y++) for (let x = 4; x < 12; x++) set(d, x, y, 255, 239, 143);
+   });
+ 
+   tile('log_side', (d, rng) => {
+@@ -628,7 +644,7 @@
+         SPRUCE_LOG = 23, SPRUCE_LEAVES = 24, BIRCH_LOG = 25, BIRCH_LEAVES = 26,
+         CHERRY_LOG = 27, CHERRY_LEAVES = 28, CHERRY_PLANKS = 29, PINK_PETALS = 30,
+         RED_SAND = 31, TERRACOTTA = 32, ORANGE_TERRACOTTA = 33,
+-        YELLOW_TERRACOTTA = 34, WHITE_TERRACOTTA = 35, MOSS = 36, CLAY = 37, DRIPSTONE = 38;
++        YELLOW_TERRACOTTA = 34, WHITE_TERRACOTTA = 35, MOSS = 36, CLAY = 37, DRIPSTONE = 38, TORCH = 39;
+ 
+   const DEFS = [
+     { name: '空气' },
+@@ -669,13 +685,15 @@
+     { name: '白色陶瓦', solid: 1, opaque: 1, tex: { all: 'white_terracotta' } },
+     { name: '苔藓块', solid: 1, opaque: 1, tex: { all: 'moss' } },
+     { name: '黏土', solid: 1, opaque: 1, tex: { all: 'clay' } },
+-    { name: '滴水石块', solid: 1, opaque: 1, tex: { all: 'dripstone' } }
++    { name: '滴水石块', solid: 1, opaque: 1, tex: { all: 'dripstone' } },
++    { name: '火把', solid: 0, opaque: 0, light: 14, tex: { top: 'torch_top', side: 'torch_side', bottom: 'torch_side' } }
+   ];
+ 
+   const BLOCKS = DEFS.map((d, id) => {
+     const b = {
+       id, name: d.name,
+-      solid: !!d.solid, opaque: !!d.opaque, liquid: !!d.liquid, transparent: !!d.transparent
++      solid: !!d.solid, opaque: !!d.opaque, liquid: !!d.liquid, transparent: !!d.transparent,
++      light: d.light || 0
+     };
+     if (d.tex) {
+       const top = d.tex.all || d.tex.top || d.tex.side;
+@@ -700,6 +718,13 @@
+     ctx.clearRect(0, 0, S, S);
+     ctx.imageSmoothingEnabled = false;
+     if (!B || !B.tex) return;
++
++    if (id === TORCH) {
++      const t = B.tex.side;
++      const col = (t % GRID) * TS, row = ((t / GRID) | 0) * TS;
++      ctx.drawImage(atlas, col, row, TS, TS, S * 0.12, S * 0.04, S * 0.76, S * 0.92);
++      return;
++    }
+ 
+     const w = S * 0.8;
+     const ox = (S - w) / 2, oy = S * 0.09;
+@@ -736,7 +761,7 @@
+     AIR, GRASS, DIRT, STONE, COBBLE, SAND, WATER, LOG, LEAVES, PLANKS, GLASS, BRICK, SNOW, BEDROCK,
+     COAL_ORE, IRON_ORE, GOLD_ORE, DIAMOND_ORE, REDSTONE_ORE, TABLE, WOOL, CACTUS, ICE, SPRUCE_LOG, SPRUCE_LEAVES, BIRCH_LOG, BIRCH_LEAVES,
+     CHERRY_LOG, CHERRY_LEAVES, CHERRY_PLANKS, PINK_PETALS, RED_SAND, TERRACOTTA, ORANGE_TERRACOTTA,
+-    YELLOW_TERRACOTTA, WHITE_TERRACOTTA, MOSS, CLAY, DRIPSTONE
++    YELLOW_TERRACOTTA, WHITE_TERRACOTTA, MOSS, CLAY, DRIPSTONE, TORCH
+   };
+   MC.MOB_TILES = {
+     wool: tileIndex.wool,
+@@ -795,7 +820,8 @@
+     35: { hard: 1.25, tool: 'pickaxe' },
+     36: { hard: 0.1, tool: 'hoe' },
+     37: { hard: 0.6, tool: 'shovel' },
+-    38: { hard: 1.5, tool: 'pickaxe' }
++    38: { hard: 1.5, tool: 'pickaxe' },
++    39: { hard: 0.1, tool: null }
+   };
+   MC.MINE = MINE;
+ 
+@@ -805,5 +831,5 @@
+                   SPRUCE_LOG, SPRUCE_LEAVES, BIRCH_LOG, BIRCH_LEAVES,
+                   CHERRY_LOG, CHERRY_LEAVES, CHERRY_PLANKS, PINK_PETALS, RED_SAND,
+                   TERRACOTTA, ORANGE_TERRACOTTA, YELLOW_TERRACOTTA, WHITE_TERRACOTTA,
+-                  MOSS, CLAY, DRIPSTONE];
++                  MOSS, CLAY, DRIPSTONE, TORCH];
+ })();
+--- a/js/world.js
++++ b/js/world.js
+@@ -40,6 +40,7 @@
+       this.cx = cx;
+       this.cz = cz;
+       this.blocks = new Uint8Array(CHUNK_VOL);
++      this.light = new Uint8Array(CHUNK_VOL);
+       this.generated = false;
+       this.dirty = false;
+       this.gpu = null;
+@@ -54,6 +55,7 @@
+     constructor(seed, savedEdits) {
+       this.seed = seed | 0;
+       this.chunks = new Map();
++      this.lightSources = new Map(); // 已加载火把；光照不写入存档
+       this.edits = new Map();       // "x,y,z" -> [x,y,z,id]
+       this.editIndex = new Map();   // "cx,cz" -> Map<区块内索引, id>
+       this.peaks = [
+@@ -103,6 +105,19 @@
+         this.generate(c);
+         c.generated = true;
+         c.dirty = true;
++        // 旧档的火把由 edits 写入方块，生成后在这里恢复光照。
++        const edits = this.editIndex.get(key);
++        if (edits) for (const [index, id] of edits) {
++          if (id !== B.TORCH || c.blocks[index] !== B.TORCH) continue;
++          const y = Math.floor(index / 256), z = (index >> 4) & 15, x = index & 15;
++          this.lightSources.set((cx * 16 + x) + ',' + y + ',' + (cz * 16 + z),
++            [cx * 16 + x, y, cz * 16 + z]);
++        }
++        for (const source of this.lightSources.values()) {
++          if (source[0] >= cx * 16 - 14 && source[0] < cx * 16 + 30 &&
++              source[2] >= cz * 16 - 14 && source[2] < cz * 16 + 30)
++            this.spreadLight(source[0], source[1], source[2], 14, true);
++        }
+         // 新邻居的接缝面需要重建
+         for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+           const nb = this.chunks.get((cx + dx) + ',' + (cz + dz));
+@@ -126,6 +141,85 @@
+       const c = this.chunks.get((x >> 4) + ',' + (z >> 4));
+       if (!c || !c.generated) return 0;
+       return c.blocks[(y * CHUNK + (z & 15)) * CHUNK + (x & 15)];
++    }
++
++    getLight(x, y, z) {
++      if (y < 0 || y >= HEIGHT) return 0;
++      const c = this.chunks.get((x >> 4) + ',' + (z >> 4));
++      return c && c.generated ? c.light[(y * CHUNK + (z & 15)) * CHUNK + (x & 15)] : 0;
++    }
++
++    lightCell(x, y, z) {
++      if (y < 0 || y >= HEIGHT) return null;
++      const c = this.chunks.get((x >> 4) + ',' + (z >> 4));
++      if (!c || !c.generated) return null;
++      return { c, index: (y * CHUNK + (z & 15)) * CHUNK + (x & 15) };
++    }
++
++    setLight(x, y, z, value) {
++      const cell = this.lightCell(x, y, z);
++      if (!cell || cell.c.light[cell.index] === value) return false;
++      cell.c.light[cell.index] = value;
++      cell.c.dirty = true;
++      return true;
++    }
++
++    spreadLight(x, y, z, level, traverseExisting) {
++      // 只在方块变化或新区块生成时运行，BFS 不会进入尚未生成的区块。
++      if (!this.lightCell(x, y, z)) return;
++      if (level > this.getLight(x, y, z)) this.setLight(x, y, z, level);
++      const q = [[x, y, z, this.getLight(x, y, z)]];
++      const visited = traverseExisting ? new Set([x + ',' + y + ',' + z]) : null;
++      for (let head = 0; head < q.length; head++) {
++        const [px, py, pz, l] = q[head];
++        if (l <= 1) continue;
++        for (const [dx, dy, dz] of World.DIRS) {
++          const nx = px + dx, ny = py + dy, nz = pz + dz;
++          const cell = this.lightCell(nx, ny, nz);
++          if (!cell || MC.BLOCKS[cell.c.blocks[cell.index]].opaque) continue;
++          const next = Math.max(l - 1, MC.BLOCKS[cell.c.blocks[cell.index]].light);
++          if (next < cell.c.light[cell.index] || (!visited && next === cell.c.light[cell.index])) continue;
++          if (visited) {
++            const key = nx + ',' + ny + ',' + nz;
++            if (visited.has(key)) continue;
++            visited.add(key);
++          }
++          if (next > cell.c.light[cell.index]) this.setLight(nx, ny, nz, next);
++          q.push([nx, ny, nz, next]);
++        }
++      }
++    }
++
++    removeLight(x, y, z, oldLevel) {
++      if (!oldLevel) return;
++      this.setLight(x, y, z, 0);
++      const dark = [[x, y, z, oldLevel]], relight = new Map();
++      for (let head = 0; head < dark.length; head++) {
++        const [px, py, pz, l] = dark[head];
++        for (const [dx, dy, dz] of World.DIRS) {
++          const nx = px + dx, ny = py + dy, nz = pz + dz;
++          const nl = this.getLight(nx, ny, nz);
++          if (!nl) continue;
++          const id = this.getBlock(nx, ny, nz);
++          if (!MC.BLOCKS[id].light && nl < l) {
++            this.setLight(nx, ny, nz, 0);
++            dark.push([nx, ny, nz, nl]);
++          } else relight.set(nx + ',' + ny + ',' + nz, [nx, ny, nz, nl]);
++        }
++      }
++      for (const [rx, ry, rz, l] of relight.values()) this.spreadLight(rx, ry, rz, l);
++    }
++
++    unloadChunk(c) {
++      const removed = [];
++      for (const [key, source] of this.lightSources) {
++        if ((source[0] >> 4) === c.cx && (source[2] >> 4) === c.cz) {
++          this.lightSources.delete(key);
++          removed.push(source);
++        }
++      }
++      this.chunks.delete(this.chunkKey(c.cx, c.cz));
++      for (const source of removed) this.removeLight(source[0], source[1], source[2], 14);
+     }
+ 
+     setBlock(x, y, z, id, record) {
+@@ -134,7 +228,21 @@
+       const c = this.chunks.get(cx + ',' + cz);
+       if (!c || !c.generated) return false;
+       const lx = x & 15, lz = z & 15;
++      const old = c.get(lx, y, lz);
++      if (old === id) return false;
++      const oldLight = this.getLight(x, y, z);
+       c.blocks[(y * CHUNK + lz) * CHUNK + lx] = id;
++      if (old === B.TORCH) this.lightSources.delete(x + ',' + y + ',' + z);
++      if (id === B.TORCH) this.lightSources.set(x + ',' + y + ',' + z, [x, y, z]);
++      if (MC.BLOCKS[old].light || (!MC.BLOCKS[old].opaque && MC.BLOCKS[id].opaque))
++        this.removeLight(x, y, z, oldLight);
++      if (MC.BLOCKS[id].light) this.spreadLight(x, y, z, MC.BLOCKS[id].light);
++      else if (MC.BLOCKS[old].opaque && !MC.BLOCKS[id].opaque) {
++        for (const [dx, dy, dz] of World.DIRS) {
++          const l = this.getLight(x + dx, y + dy, z + dz);
++          if (l > 1) this.spreadLight(x + dx, y + dy, z + dz, l);
++        }
++      }
+       c.dirty = true;
+       if (lx === 0) this.markDirty(cx - 1, cz);
+       if (lx === 15) this.markDirty(cx + 1, cz);
+@@ -706,6 +814,8 @@
+     }
+   }
+ 
++  World.DIRS = [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]];
++
+   MC.World = World;
+   MC.WORLD = { CHUNK, HEIGHT, SEA, CHUNK_VOL };
+   MC.BIOME_NAMES = BIOME_NAMES;
+--- a/js/mesher.js
++++ b/js/mesher.js
+@@ -60,6 +60,18 @@
+       return id !== 0 && BLOCKS[id].opaque ? 1 : 0;
+     };
+ 
++    function torchQuad(wx, y, wz, a, b, out) {
++      const uv = MC.Atlas.uv(BLOCKS[MC.Block.TORCH].tex.side);
++      const base = out.verts.length / 10;
++      for (const p of [a[0], a[1], b[1], b[0]]) {
++        out.verts.push(wx + p[0], y + p[1], wz + p[2],
++          uv[0] + p[3] * (uv[2] - uv[0]), uv[1] + p[4] * (uv[3] - uv[1]),
++          1, 0, 1, 0, 1);
++      }
++      out.idx.push(base, base + 1, base + 2, base, base + 2, base + 3,
++        base + 2, base + 1, base, base + 3, base + 2, base);
++    }
++
+     for (let y = 0; y < HEIGHT; y++) {
+       for (let z = 0; z < CHUNK; z++) {
+         for (let x = 0; x < CHUNK; x++) {
+@@ -67,6 +79,16 @@
+           if (id === 0) continue;
+           const B = BLOCKS[id];
+           const wx = bx + x, wz = bz + z;
++          if (id === MC.Block.TORCH) {
++            // 交叉的透明像素面片形成细柄与火焰，不占满一格。
++            torchQuad(wx, y, wz,
++              [[0.27, 0, 0.27, 0, 1], [0.27, 0.85, 0.27, 0, 0]],
++              [[0.73, 0, 0.73, 1, 1], [0.73, 0.85, 0.73, 1, 0]], opa);
++            torchQuad(wx, y, wz,
++              [[0.27, 0, 0.73, 0, 1], [0.27, 0.85, 0.73, 0, 0]],
++              [[0.73, 0, 0.27, 1, 1], [0.73, 0.85, 0.27, 1, 0]], opa);
++            continue;
++          }
+           const depth = skyTop[z * CHUNK + x] - (y + 1);
+           const skyDim = B.liquid ? 1 : Math.min(1, Math.max(0.72, 1 - depth * 0.009));
+ 
+@@ -80,8 +102,9 @@
+             const out = B.transparent ? tra : opa;
+             const uv = MC.Atlas.uv(B.tex[F.key]);
+             const u0 = uv[0], v0 = uv[1], du = uv[2] - uv[0], dv = uv[3] - uv[1];
+-            const base = out.verts.length / 9;
++            const base = out.verts.length / 10;
+             const lv = [0, 0, 0, 0];
++            const blockLight = world.getLight(wx + F.n[0], y + F.n[1], wz + F.n[2]) / 14;
+ 
+             for (let k = 0; k < 4; k++) {
+               const V = F.verts[k];
+@@ -112,7 +135,7 @@
+                 wx + V[0], y + V[1] - (id === MC.Block.PINK_PETALS ? 0.94 : 0), wz + V[2],
+                 u0 + uu[0] * du, v0 + uu[1] * dv,
+                 light,
+-                F.n[0], F.n[1], F.n[2]
++                F.n[0], F.n[1], F.n[2], blockLight
+               );
+             }
+             // 根据 AO 选择更平顺的对角线，避免暗角被切成明显的三角形
+--- a/js/renderer.js
++++ b/js/renderer.js
+@@ -178,6 +178,7 @@
+ layout(location=1) in vec2 aUV;
+ layout(location=2) in float aLight;
+ layout(location=3) in vec3 aNormal;
++layout(location=4) in float aBlockLight;
+ uniform mat4 uVP;
+ uniform mat4 uModel;
+ uniform vec3 uCamPos;
+@@ -186,6 +187,7 @@
+ out float vDist;
+ out vec3 vWorld;
+ out vec3 vNormal;
++out float vBlockLight;
+ void main() {
+   vec4 wp = uModel * vec4(aPos, 1.0);
+   gl_Position = uVP * wp;
+@@ -194,6 +196,7 @@
+   vDist = distance(wp.xyz, uCamPos);
+   vWorld = wp.xyz;
+   vNormal = mat3(uModel) * aNormal;
++  vBlockLight = aBlockLight;
+ }`;
+ 
+   const FS_MAIN = `#version 300 es
+@@ -203,6 +206,7 @@
+ in float vDist;
+ in vec3 vWorld;
+ in vec3 vNormal;
++in float vBlockLight;
+ uniform sampler2D uTex;
+ uniform vec3 uFogColor;
+ uniform float uFogNear;
+@@ -216,6 +220,8 @@
+ uniform vec3 uAmbient;
+ uniform vec3 uDirect;
+ uniform float uHitFlash;
++uniform float uFlicker;
++uniform float uMobLight;
+ out vec4 fragColor;
+ 
+ float shadowAt(vec3 wp, vec3 n) {
+@@ -240,7 +246,9 @@
+   vec3 normal = normalize(vNormal);
+   float sh = shadowAt(vWorld, normal);
+   float diffuse = 0.44 + 0.56 * max(dot(normal, uLightDir), 0.0);
+-  vec3 col = c.rgb * vLight * (uAmbient + uDirect * diffuse * mix(0.12, 1.0, sh));
++  vec3 sun = uAmbient + uDirect * diffuse * mix(0.12, 1.0, sh);
++  vec3 torch = vec3(1.14, 0.79, 0.44) * max(vBlockLight, uMobLight) * uFlicker;
++  vec3 col = c.rgb * vLight * max(sun, torch);
+   float f = smoothstep(uFogNear, uFogFar, vDist);
+   col = mix(col, uFogColor, f);
+   col = mix(col, vec3(1.0, 0.18, 0.18), uHitFlash * 0.72);
+@@ -457,7 +465,7 @@
+       this.progShadow = makeProgram(gl, VS_SHADOW, FS_SHADOW);
+       this.uShadowProg = this.uniforms(this.progShadow, ['uLightVP', 'uModel', 'uTex']);
+ 
+-      this.uMain = this.uniforms(this.progMain, ['uVP', 'uModel', 'uCamPos', 'uTex', 'uFogColor', 'uFogNear', 'uFogFar', 'uAlpha', 'uShadowVP', 'uShadowMap', 'uShadowTexel', 'uShadowOn', 'uLightDir', 'uAmbient', 'uDirect', 'uHitFlash']);
++      this.uMain = this.uniforms(this.progMain, ['uVP', 'uModel', 'uCamPos', 'uTex', 'uFogColor', 'uFogNear', 'uFogFar', 'uAlpha', 'uShadowVP', 'uShadowMap', 'uShadowTexel', 'uShadowOn', 'uLightDir', 'uAmbient', 'uDirect', 'uHitFlash', 'uFlicker', 'uMobLight']);
+       this.uSky = this.uniforms(this.progSky, ['uInvVP', 'uCam', 'uTime', 'uCloudY', 'uSunDir', 'uZenith', 'uHorizon', 'uDay', 'uTwilight']);
+       this.uMist = this.uniforms(this.progMist, ['uVP', 'uCenter', 'uRight', 'uRadius', 'uHeight', 'uVertical', 'uTime', 'uDay', 'uTwilight', 'uStrength']);
+       this.uLine = this.uniforms(this.progLine, ['uVP', 'uOffset', 'uScale', 'uColor']);
+@@ -575,11 +583,11 @@
+                   (F.key === 'top' ? tiles.top : F.key === 'bottom' ? tiles.bottom : tiles.side);
+         const uv = MC.Atlas.uv(t);
+         const du = uv[2] - uv[0], dv = uv[3] - uv[1];
+-        const base = verts.length / 9;
++        const base = verts.length / 10;
+         for (let k = 0; k < 4; k++) {
+           verts.push(F.v[k][0], F.v[k][1], F.v[k][2],
+             uv[0] + F.uv[k][0] * du, uv[1] + F.uv[k][1] * dv, F.shade,
+-            F.n[0], F.n[1], F.n[2]);
++            F.n[0], F.n[1], F.n[2], 0);
+         }
+         idx.push(base, base + 1, base + 2, base, base + 2, base + 3);
+       }
+@@ -600,11 +608,12 @@
+       const ibo = gl.createBuffer();
+       gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, ibo);
+       gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, data.idx, gl.STATIC_DRAW);
+-      const stride = 36;
++      const stride = 40;
+       gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 3, gl.FLOAT, false, stride, 0);
+       gl.enableVertexAttribArray(1); gl.vertexAttribPointer(1, 2, gl.FLOAT, false, stride, 12);
+       gl.enableVertexAttribArray(2); gl.vertexAttribPointer(2, 1, gl.FLOAT, false, stride, 20);
+       gl.enableVertexAttribArray(3); gl.vertexAttribPointer(3, 3, gl.FLOAT, false, stride, 24);
++      gl.enableVertexAttribArray(4); gl.vertexAttribPointer(4, 1, gl.FLOAT, false, stride, 36);
+       gl.bindVertexArray(null);
+       return { vao, vbo, ibo, count: data.idx.length };
+     }
+@@ -771,7 +780,7 @@
+     }
+ 
+     /* ---------- 帧渲染 ---------- */
+-    render(world, cam, chunks, hit, time, mobBoxes, hand) {
++    render(world, cam, chunks, hit, time, mobBoxes, hand, particles) {
+       const gl = this.gl;
+       this.resize();
+       const W = this.canvas.width, H = this.canvas.height;
+@@ -832,6 +841,8 @@
+       gl.uniform1f(u.uFogFar, this.fogFar);
+       gl.uniform1f(u.uAlpha, 1);
+       gl.uniform1f(u.uHitFlash, 0);
++      gl.uniform1f(u.uFlicker, 0.97 + 0.03 * Math.sin(time * 19.7));
++      gl.uniform1f(u.uMobLight, 0);
+       gl.uniform3fv(u.uLightDir, light.light);
+       gl.uniform3fv(u.uAmbient, under ? [0.29, 0.47, 0.60] : light.ambient);
+       gl.uniform3fv(u.uDirect, under ? [0.08, 0.11, 0.14] : light.direct);
+@@ -872,6 +883,8 @@
+           const cube = this.getMobCube(b.tiles);
+           if (!cube) continue;
+           gl.uniform1f(u.uHitFlash, b.flash || 0);
++          gl.uniform1f(u.uMobLight, world.getLight(
++            Math.floor(b.m[12]), Math.floor(b.m[13]), Math.floor(b.m[14])) / 14);
+           gl.uniformMatrix4fv(u.uModel, false, b.m);
+           gl.bindVertexArray(cube.vao);
+           gl.drawElements(gl.TRIANGLES, cube.count, gl.UNSIGNED_INT, 0);
+@@ -879,6 +892,7 @@
+         }
+         gl.uniformMatrix4fv(u.uModel, false, this.identity);
+         gl.uniform1f(u.uHitFlash, 0);
++        gl.uniform1f(u.uMobLight, 0);
+       }
+ 
+       /* --- 透明区块（远到近） --- */
+@@ -951,6 +965,9 @@
+         }
+       }
+ 
++      /* --- 粒子与地形共用深度，只提交一次点精灵批次 --- */
++      if (particles) particles.render(this, cam);
++
+       /* --- 选中方块线框 --- */
+       if (hit) {
+         gl.useProgram(this.progLine);
+--- a/js/items.js
++++ b/js/items.js
+@@ -186,11 +186,11 @@
+ 
+   /* ---------- 工具 ---------- */
+   const TIERS = [
+-    { key: 'wood', name: '木', speed: 2.5, c: [[150, 110, 64], [176, 136, 86], [112, 80, 44]] },
+-    { key: 'stone', name: '石', speed: 4.5, c: [[128, 128, 128], [158, 158, 158], [94, 94, 94]] },
+-    { key: 'iron', name: '铁', speed: 7, c: [[206, 206, 214], [238, 238, 246], [152, 152, 160]] },
+-    { key: 'gold', name: '金', speed: 12, c: [[236, 196, 72], [255, 226, 118], [184, 142, 38]] },
+-    { key: 'diamond', name: '钻石', speed: 9, c: [[92, 222, 214], [158, 246, 240], [46, 168, 164]] }
++    { key: 'wood', name: '木', speed: 2.5, durability: 59, c: [[150, 110, 64], [176, 136, 86], [112, 80, 44]] },
++    { key: 'stone', name: '石', speed: 4.5, durability: 131, c: [[128, 128, 128], [158, 158, 158], [94, 94, 94]] },
++    { key: 'iron', name: '铁', speed: 7, durability: 250, c: [[206, 206, 214], [238, 238, 246], [152, 152, 160]] },
++    { key: 'gold', name: '金', speed: 12, durability: 32, c: [[236, 196, 72], [255, 226, 118], [184, 142, 38]] },
++    { key: 'diamond', name: '钻石', speed: 9, durability: 1561, c: [[92, 222, 214], [158, 246, 240], [46, 168, 164]] }
+   ];
+   const TOOL_TYPES = [
+     { key: 'pickaxe', name: '镐' },
+@@ -266,7 +266,7 @@
+         id: toolId++, key: name,
+         name: tier.name + tt.name, kind: 'tool',
+         sprite: MC.Atlas.index[name],
+-        tool: { type: tt.key, tier: tier.key, speed: tier.speed }
++        tool: { type: tt.key, tier: tier.key, speed: tier.speed, maxDur: tier.durability }
+       });
+     }
+   }
+--- a/js/crafting.js
++++ b/js/crafting.js
+@@ -36,6 +36,7 @@
+   add({ name: '合成台', pattern: [[PLANKS, PLANKS], [PLANKS, PLANKS]], out: { id: TABLE, count: 1 } });
+   add({ name: '羊毛', pattern: [[107, 107], [107, 107]], out: { id: WOOL, count: 1 } });
+   add({ name: '面包', pattern: [[WHEAT, WHEAT, WHEAT]], out: { id: BREAD, count: 1 } });
++  add({ name: '火把 ×4', pattern: [[101], [STICK]], out: { id: MC.Block.TORCH, count: 4 } });
+ 
+   let toolId = 120;
+   for (let t = 0; t < TIER_MATS.length; t++) {
+@@ -120,4 +121,5 @@
+   MC.RECIPES = RECIPES;
+   MC.craftMatch = match;
+   MC.craftFill = fillGrid;
++  MC.craftIngredients = (rec) => (rec.shapeless || rec.pattern.flat()).filter(Boolean);
+ })();
+--- a/js/main.js
++++ b/js/main.js
+@@ -44,7 +44,11 @@
+   }
+ 
+   const MAX_STACK = 64;
+-  const stack = (id, count) => ({ id, count });
++  const stack = (id, count, dur) => {
++    const tool = MC.itemTool(id);
++    return tool ? { id, count: 1, dur: Number.isFinite(dur) ?
++      Math.max(1, Math.min(tool.maxDur, dur)) : tool.maxDur, maxDur: tool.maxDur } : { id, count };
++  };
+   const START_HOTBAR = [[1, 64], [2, 64], [3, 64], [4, 64], [5, 64], [7, 64], [9, 64], [19, 1], [20, 64]];
+ 
+   function parseStacks(list, size) {
+@@ -52,7 +56,8 @@
+     if (!Array.isArray(list)) return out;
+     for (let i = 0; i < size && i < list.length; i++) {
+       const v = list[i];
+-      if (Array.isArray(v) && v.length === 2 && v[0] > 0 && v[1] > 0) out[i] = stack(v[0], v[1]);
++      if (Array.isArray(v) && v.length >= 2 && v[0] > 0 && v[1] > 0)
++        out[i] = stack(v[0], v[1], v[2]);
+     }
+     return out;
+   }
+@@ -73,6 +78,7 @@
+     return;
+   }
+   const minimap = new MC.Minimap(world, $('miniMapWrap'), $('miniMap'), $('miniNearest'));
++  const particles = new MC.Particles(renderer);
+ 
+   /* ================= 状态 ================= */
+   const RENDER_R = 7;
+@@ -85,7 +91,6 @@
+     invTab: 'bag',
+     craftGrid: new Array(9).fill(0),
+     craftRecipe: null,
+-    invTab: 'blocks',
+     mine: null,
+     mouseDown: [false, false],
+     breakTimer: 0,
+@@ -439,15 +444,31 @@
+     const cv = slot.querySelector('canvas');
+     const cnt = slot.querySelector('.count');
+     const st = state.hotbar[i];
++    const oldBar = slot.querySelector('.durability');
++    if (oldBar) oldBar.remove();
++    slot.removeAttribute('title');
+     if (st) {
+       MC.itemIcon(cv, st.id, 96);
+       cnt.textContent = st.count > 1 ? st.count : '';
++      if (st.maxDur) addDurabilityBar(slot, st);
+     } else {
+       cv.width = 96;
+       cv.height = 96;
+       cv.getContext('2d').clearRect(0, 0, 96, 96);
+       cnt.textContent = '';
+     }
++  }
++
++  function addDurabilityBar(el, st) {
++    const bar = document.createElement('div');
++    bar.className = 'durability';
++    const fill = document.createElement('i');
++    const ratio = Math.max(0, st.dur / st.maxDur);
++    fill.style.width = (ratio * 100).toFixed(1) + '%';
++    fill.style.backgroundColor = 'hsl(' + Math.round(ratio * 112) + ' 88% 52%)';
++    bar.appendChild(fill);
++    el.appendChild(bar);
++    el.title = MC.itemName(st.id) + ' · 耐久 ' + st.dur + '/' + st.maxDur;
+   }
+ 
+   function swingHand() {
+@@ -514,6 +535,7 @@
+       cnt.textContent = st.count;
+       el.appendChild(cnt);
+     }
++    if (st && st.maxDur) addDurabilityBar(el, st);
+     return el;
+   }
+ 
+@@ -539,11 +561,11 @@
+     creativeGridEl.innerHTML = '';
+     for (const it of MC.ALL_ITEMS) {
+       const count = it.kind === 'tool' ? 1 : MAX_STACK;
+-      const el = makeInvSlot({ id: it.id, count });
++      const el = makeInvSlot(stack(it.id, count));
+       el.title = it.name;
+       el.addEventListener('click', () => {
+         if (state.cursor) return;
+-        state.cursor = { id: it.id, count };
++        state.cursor = stack(it.id, count);
+         updateCursor();
+       });
+       creativeGridEl.appendChild(el);
+@@ -560,7 +582,7 @@
+     else renderCreative();
+     invHint.textContent = isBag
+       ? '挖到的材料自动进背包 · 点物品拿起，再点快捷栏格子替换'
+-      : '点物品拿一叠到手上，再切回「背包」放下';
++      : '创造页可无限领取物品 · 点物品拿起，再切回「背包」放下';
+   }
+ 
+   function moveCursor() {
+@@ -586,7 +608,7 @@
+       if (!slot) {
+         arr[index] = state.cursor;
+         state.cursor = null;
+-      } else if (slot.id === state.cursor.id && slot.count < MAX_STACK) {
++      } else if (slot.id === state.cursor.id && !MC.itemTool(slot.id) && slot.count < MAX_STACK) {
+         const add = Math.min(MAX_STACK - slot.count, state.cursor.count);
+         slot.count += add;
+         state.cursor.count -= add;
+@@ -607,8 +629,10 @@
+ 
+   function addToBag(id, count) {
+     if (!id || count <= 0) return 0;
++    const isTool = !!MC.itemTool(id);
+     let rest = count;
+     for (const s of state.bag) {
++      if (isTool) break;
+       if (!s || s.id !== id || s.count >= MAX_STACK) continue;
+       const add = Math.min(MAX_STACK - s.count, rest);
+       s.count += add;
+@@ -617,12 +641,37 @@
+     }
+     for (let i = 0; i < state.bag.length && rest > 0; i++) {
+       if (state.bag[i]) continue;
+-      const add = Math.min(MAX_STACK, rest);
+-      state.bag[i] = { id, count: add };
++      const add = Math.min(isTool ? 1 : MAX_STACK, rest);
++      state.bag[i] = stack(id, add);
+       rest -= add;
+     }
+     dirtySave = true;
+     return count - rest;
++  }
++
++  function addStackToBag(st) {
++    if (!st) return true;
++    if (st.maxDur) {
++      const i = state.bag.findIndex(s => !s);
++      if (i < 0) return false;
++      state.bag[i] = st;
++      dirtySave = true;
++      return true;
++    }
++    const room = bagSpace(st.id);
++    if (room < st.count) return false;
++    addToBag(st.id, st.count);
++    return true;
++  }
++
++  function bagSpace(id) {
++    const isTool = !!MC.itemTool(id);
++    let room = 0;
++    for (const st of state.bag) {
++      if (!st) room += isTool ? 1 : MAX_STACK;
++      else if (!isTool && st.id === id) room += MAX_STACK - st.count;
++    }
++    return room;
+   }
+ 
+   function openInventory() {
+@@ -637,7 +686,12 @@
+   function closeInventory(relock) {
+     if (state.mode !== 'inventory') return;
+     if (state.cursor) {
+-      addToBag(state.cursor.id, state.cursor.count);
++      if (!addStackToBag(state.cursor)) {
++        const empty = state.hotbar.findIndex(st => !st);
++        if (empty < 0) { toast('背包已满，请先放下手上的物品'); return; }
++        state.hotbar[empty] = state.cursor;
++        paintSlot(empty);
++      }
+       state.cursor = null;
+       updateCursor();
+     }
+@@ -671,7 +725,8 @@
+     const rec = MC.craftMatch(state.craftGrid);
+     state.craftRecipe = rec;
+     craftResultEl.innerHTML = '';
+-    craftResultEl.classList.toggle('ready', !!rec);
++    const missing = rec ? missingCraftMaterials(rec) : [];
++    craftResultEl.classList.toggle('ready', !!rec && !missing.length);
+     if (rec) {
+       const cv = document.createElement('canvas');
+       MC.itemIcon(cv, rec.out.id, 110);
+@@ -682,17 +737,56 @@
+         cnt.textContent = '×' + rec.out.count;
+         craftResultEl.appendChild(cnt);
+       }
+-      craftHintEl.textContent = '可以合成：' + rec.name;
++      craftHintEl.textContent = missing.length ? '缺少 ' + missing.join('、') : '可以合成：' + rec.name;
+     } else {
+       craftHintEl.textContent = '没有匹配的配方 · 试试左边的工具配方';
+     }
++  }
++
++  function missingCraftMaterials(rec) {
++    const need = new Map();
++    for (const id of MC.craftIngredients(rec)) need.set(id, (need.get(id) || 0) + 1);
++    const missing = [];
++    for (const [id, count] of need) {
++      let have = 0;
++      for (const st of state.bag) if (st && st.id === id) have += st.count;
++      if (have < count) missing.push(MC.itemName(id) + ' ×' + (count - have));
++    }
++    return missing;
+   }
+ 
+   function takeCraft() {
+     const rec = state.craftRecipe;
+     if (!rec) return;
++    const missing = missingCraftMaterials(rec);
++    if (missing.length) { toast('缺少 ' + missing.join('、')); refreshCraft(); return; }
++    const need = new Map();
++    for (const id of MC.craftIngredients(rec)) need.set(id, (need.get(id) || 0) + 1);
++    let outputRoom = bagSpace(rec.out.id);
++    for (const [id, count] of need) {
++      let left = count;
++      for (const st of state.bag) {
++        if (!st || st.id !== id || left <= 0) continue;
++        const used = Math.min(left, st.count);
++        if (used === st.count) outputRoom += MC.itemTool(rec.out.id) ? 1 : MAX_STACK;
++        else if (id === rec.out.id) outputRoom += used;
++        left -= used;
++      }
++    }
++    if (outputRoom < rec.out.count) { toast('背包已满'); return; }
++    for (const [id, count] of need) {
++      let left = count;
++      for (let i = 0; i < state.bag.length && left > 0; i++) {
++        const st = state.bag[i];
++        if (!st || st.id !== id) continue;
++        const used = Math.min(left, st.count);
++        st.count -= used;
++        left -= used;
++        if (st.count === 0) state.bag[i] = null;
++      }
++    }
+     const got = addToBag(rec.out.id, rec.out.count);
+-    if (!got) { toast('背包已满'); return; }
++    if (got !== rec.out.count) { toast('背包已满'); return; }
+     showItemName(MC.itemName(rec.out.id));
+     toast('合成 ' + rec.name + ' → 背包');
+     state.craftGrid.fill(0);
+@@ -835,7 +929,7 @@
+     }
+     for (const c of drop) {
+       renderer.disposeChunk(c);
+-      world.chunks.delete(c.cx + ',' + c.cz);
++      world.unloadChunk(c);
+     }
+   }
+ 
+@@ -920,6 +1014,9 @@
+     const damage = tool && tool.type === 'sword' ? swordDamage[tool.tier] : tool ? 2 : 1;
+     const dx = -Math.sin(player.yaw), dz = -Math.cos(player.yaw);
+     const defeated = mobManager.attack(mob, damage, dx, dz);
++    particles.burst(mob.pos[0], mob.pos[1] + mob.h * 0.6, mob.pos[2], MC.Block.WOOL,
++      defeated ? 16 : 7, 'hit');
++    if (tool && tool.type === 'sword') wearHeldTool();
+     swingHand();
+     sfx.noise(210, 0.09, 0.9, 0.11, 0.8);
+     animalSound(mob.type, 0.10);
+@@ -934,6 +1031,20 @@
+     }
+   }
+ 
++  function wearHeldTool() {
++    const slot = state.selected, held = state.hotbar[slot];
++    if (!held || !held.maxDur) return;
++    held.dur--;
++    if (held.dur <= 0) {
++      const name = MC.itemName(held.id);
++      state.hotbar[slot] = null;
++      sfx.noise(1450, 0.06, 1.5, 0.17, 0.35);
++      toast(name + ' 已损坏');
++    }
++    paintSlot(slot);
++    dirtySave = true;
++  }
++
+   function resetMine() {
+     state.mine = null;
+     mineBar.classList.remove('show');
+@@ -985,6 +1096,8 @@
+       }
+     }
+     if (!world.setBlock(hit.x, hit.y, hit.z, flood ? MC.Block.WATER : 0)) return;
++    particles.burst(hit.x + 0.5, hit.y + 0.5, hit.z + 0.5, id, 8 + ((Math.random() * 5) | 0));
++    wearHeldTool();
+     rebuildNear(hit.x, hit.z);
+     sfx.dig(id);
+     swingHand();
+@@ -1213,8 +1326,8 @@
+     try {
+       const data = world.saveData();
+       data.terrainVersion = 3;
+-      data.inv = state.bag.map(s => (s ? [s.id, s.count] : 0));
+-      data.hotbar = state.hotbar.map(s => (s ? [s.id, s.count] : 0));
++      data.inv = state.bag.map(s => (s ? (s.maxDur ? [s.id, s.count, s.dur, s.maxDur] : [s.id, s.count]) : 0));
++      data.hotbar = state.hotbar.map(s => (s ? (s.maxDur ? [s.id, s.count, s.dur, s.maxDur] : [s.id, s.count]) : 0));
+       data.time = state.time;
+       data.summitEggs = state.summitEggs;
+       localStorage.setItem(SAVE_KEY, JSON.stringify(data));
+@@ -1333,11 +1446,17 @@
+         }
+       }
+       if (player.wantStep) {
+-        sfx.step(world.getBlock(
+-          Math.floor(player.pos[0]), Math.floor(player.pos[1] - 0.05), Math.floor(player.pos[2])));
++        const ground = world.getBlock(
++          Math.floor(player.pos[0]), Math.floor(player.pos[1] - 0.05), Math.floor(player.pos[2]));
++        sfx.step(ground);
++        if (ground === MC.Block.GRASS || ground === MC.Block.SAND || ground === MC.Block.SNOW ||
++            ground === MC.Block.RED_SAND) {
++          particles.burst(player.pos[0], player.pos[1] + 0.08, player.pos[2], ground, 2, 'dust');
++        }
+       }
+       if (player.inWater !== state.wasInWater) {
+         sfx.splash(player.inWater ? 'in' : 'out');
++        particles.burst(player.pos[0], player.pos[1] + 0.3, player.pos[2], MC.Block.WATER, 12, 'water');
+         state.wasInWater = player.inWater;
+       }
+       handleHold(dt);
+@@ -1381,6 +1500,7 @@
+       stream(0, true);
+     }
+     stream(dt);
++    particles.update(dt, world);
+     updateCamera(dt);
+ 
+     const showHit = state.mode === 'playing' || state.mode === 'inventory' || state.mode === 'crafting';
+@@ -1397,7 +1517,7 @@
+     hand.bobAmount = player.bobAmount;
+     updateHeldItem(held, state.mode === 'playing');
+     renderer.render(world, cam, drawList(), hit, state.time, mobBoxes,
+-      state.mode === 'playing' && !held ? hand : null);
++      state.mode === 'playing' && !held ? hand : null, particles);
+ 
+     updateHud(dt);
+     if (state.mode === 'playing') minimap.update(player, dt);
+@@ -1419,5 +1539,11 @@
+     shadowBtn.textContent = '阴影：' + (renderer.shadowEnabled ? '开' : '关');
+   });
+ 
+-  window.__mc = { world, player, renderer, cam, state, seed, mobManager, sfx, worldRef: world };
++  const particleBtn = $('particleBtn');
++  particleBtn.addEventListener('click', () => {
++    particles.setEnabled(!particles.enabled);
++    particleBtn.textContent = '粒子：' + (particles.enabled ? '开' : '关');
++  });
++
++  window.__mc = { world, player, renderer, cam, state, seed, mobManager, sfx, particles, worldRef: world };
+ })();
+--- a/js/minimap.js
++++ b/js/minimap.js
+@@ -24,6 +24,10 @@
+       this.base = document.createElement('canvas');
+       this.base.width = this.base.height = RES;
+       this.baseCtx = this.base.getContext('2d');
++      this.preview = document.createElement('canvas');
++      this.preview.width = this.preview.height = 16;
++      this.previewCtx = this.preview.getContext('2d');
++      this.previewReady = false;
+       this.nearestEl = nearestEl;
+       this.heights = new Int16Array(RES * RES);
+       this.image = null;
+@@ -49,6 +53,23 @@
+       this.image = this.baseCtx.createImageData(RES, RES);
+       this.nextRow = 0;
+       this.building = true;
++      this.centerX = this.buildX;
++      this.centerZ = this.buildZ;
++      // 先画 16×16 地形占位，完整地图仍分帧生成。
++      const preview = this.previewCtx.createImageData(16, 16);
++      for (let py = 0; py < 16; py++) for (let px = 0; px < 16; px++) {
++        const x = this.buildX + (px - 7.5) * RES * STEP / 16;
++        const z = this.buildZ + (py - 7.5) * RES * STEP / 16;
++        const field = this.world.biomeField(x, z);
++        const h = this.world.heightAt(x, z, field);
++        const biome = this.world.biomeAt(x, z, h, field);
++        const color = h >= 82 ? COLORS.snow : (COLORS[biome] || COLORS.plains);
++        const i = (py * 16 + px) * 4;
++        preview.data[i] = color[0]; preview.data[i + 1] = color[1];
++        preview.data[i + 2] = color[2]; preview.data[i + 3] = 255;
++      }
++      this.previewCtx.putImageData(preview, 0, 0);
++      this.previewReady = true;
+     }
+ 
+     buildRows(count) {
+@@ -96,9 +117,9 @@
+       ctx.clearRect(0, 0, SIZE, SIZE);
+       ctx.fillStyle = '#143044';
+       ctx.fillRect(0, 0, SIZE, SIZE);
+-      if (this.ready) {
++      if (this.ready || this.previewReady) {
+         ctx.imageSmoothingEnabled = false;
+-        ctx.drawImage(this.base, 0, 0, SIZE, SIZE);
++        ctx.drawImage(this.building ? this.preview : this.base, 0, 0, SIZE, SIZE);
+       } else {
+         ctx.fillStyle = '#cfeaf1';
+         ctx.font = '12px sans-serif';
+@@ -106,7 +127,7 @@
+         ctx.fillText('正在绘制地图…', SIZE / 2, SIZE / 2);
+       }
+ 
+-      if (this.ready && this.world.trails) {
++      if ((this.ready || this.previewReady) && this.world.trails) {
+         ctx.save();
+         ctx.strokeStyle = 'rgba(248, 225, 155, .92)';
+         ctx.lineWidth = 1.5;
+@@ -130,7 +151,7 @@
+         const dx = peak[0] - player.pos[0], dz = peak[1] - player.pos[2];
+         const dist = Math.hypot(dx, dz);
+         if (dist < nearestDist) { nearest = i; nearestDist = dist; }
+-        if (!this.ready) continue;
++        if (!this.ready && !this.previewReady) continue;
+         const pos = this.project(peak[0], peak[1]);
+         const mx = Math.max(10, Math.min(SIZE - 10, pos[0]));
+         const my = Math.max(10, Math.min(SIZE - 10, pos[1]));
+@@ -148,7 +169,7 @@
+         ctx.fillText(String(i + 1), mx, my + 0.5);
+       }
+ 
+-      if (this.ready) {
++      if (this.ready || this.previewReady) {
+         const pos = this.project(player.pos[0], player.pos[2]);
+         ctx.save();
+         ctx.translate(pos[0], pos[1]);
+@@ -182,7 +203,7 @@
+       if (!this.building && (!this.ready ||
+           Math.abs(player.pos[0] - this.centerX) > 192 ||
+           Math.abs(player.pos[2] - this.centerZ) > 192)) this.startBuild(player);
+-      if (this.building) this.buildRows(2);
++      if (this.building) this.buildRows(6);
+       this.drawWait -= dt;
+       if (this.drawWait <= 0) {
+         this.draw(player);
+--- /dev/null
++++ b/js/particles.js
+@@ -0,0 +1,175 @@
++/* particles.js — 固定容量的 CPU 粒子池，WebGL2 点精灵单次绘制 */
++(function () {
++  'use strict';
++  const MC = window.MC;
++  const LIMIT = 512;
++  const STRIDE = 12;
++
++  const VS = `#version 300 es
++layout(location=0) in vec3 aPos;
++layout(location=1) in float aSize;
++layout(location=2) in vec4 aUV;
++layout(location=3) in vec4 aColor;
++uniform mat4 uVP;
++uniform float uPointScale;
++out vec4 vUV;
++out vec4 vColor;
++void main() {
++  gl_Position = uVP * vec4(aPos, 1.0);
++  gl_PointSize = clamp(aSize * uPointScale / max(0.05, gl_Position.w), 2.0, 24.0);
++  vUV = aUV;
++  vColor = aColor;
++}`;
++  const FS = `#version 300 es
++precision mediump float;
++in vec4 vUV;
++in vec4 vColor;
++uniform sampler2D uTex;
++out vec4 fragColor;
++void main() {
++  vec2 uv = mix(vUV.xy, vUV.zw, gl_PointCoord.xy);
++  vec4 texel = texture(uTex, uv);
++  if (texel.a < 0.08) discard;
++  fragColor = vec4(texel.rgb * vColor.rgb, texel.a * vColor.a);
++}`;
++
++  function program(gl) {
++    function shader(type, source) {
++      const s = gl.createShader(type);
++      gl.shaderSource(s, source);
++      gl.compileShader(s);
++      if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s));
++      return s;
++    }
++    const vs = shader(gl.VERTEX_SHADER, VS), fs = shader(gl.FRAGMENT_SHADER, FS);
++    const p = gl.createProgram();
++    gl.attachShader(p, vs); gl.attachShader(p, fs); gl.linkProgram(p);
++    if (!gl.getProgramParameter(p, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(p));
++    gl.deleteShader(vs); gl.deleteShader(fs);
++    return p;
++  }
++
++  class Particles {
++    constructor(renderer) {
++      this.gl = renderer.gl;
++      this.enabled = true;
++      this.activeCount = 0;
++      this.cursor = 0;
++      this.pool = Array.from({ length: LIMIT }, () => ({ alive: false }));
++      this.data = new Float32Array(LIMIT * STRIDE);
++      const gl = this.gl;
++      this.prog = program(gl);
++      this.uVP = gl.getUniformLocation(this.prog, 'uVP');
++      this.uPointScale = gl.getUniformLocation(this.prog, 'uPointScale');
++      this.uTex = gl.getUniformLocation(this.prog, 'uTex');
++      this.vao = gl.createVertexArray();
++      gl.bindVertexArray(this.vao);
++      this.vbo = gl.createBuffer();
++      gl.bindBuffer(gl.ARRAY_BUFFER, this.vbo);
++      gl.bufferData(gl.ARRAY_BUFFER, this.data.byteLength, gl.DYNAMIC_DRAW);
++      const bytes = STRIDE * 4;
++      gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 3, gl.FLOAT, false, bytes, 0);
++      gl.enableVertexAttribArray(1); gl.vertexAttribPointer(1, 1, gl.FLOAT, false, bytes, 12);
++      gl.enableVertexAttribArray(2); gl.vertexAttribPointer(2, 4, gl.FLOAT, false, bytes, 16);
++      gl.enableVertexAttribArray(3); gl.vertexAttribPointer(3, 4, gl.FLOAT, false, bytes, 32);
++      gl.bindVertexArray(null);
++    }
++
++    setEnabled(value) {
++      this.enabled = !!value;
++      if (!this.enabled) {
++        for (const p of this.pool) p.alive = false;
++        this.activeCount = 0;
++      }
++    }
++
++    emit(x, y, z, vx, vy, vz, size, life, tile, r, g, b) {
++      if (!this.enabled || this.activeCount >= LIMIT) return false;
++      for (let n = 0; n < LIMIT; n++) {
++        const i = (this.cursor + n) % LIMIT, p = this.pool[i];
++        if (p.alive) continue;
++        this.cursor = (i + 1) % LIMIT;
++        p.alive = true;
++        p.x = x; p.y = y; p.z = z;
++        p.vx = vx; p.vy = vy; p.vz = vz;
++        p.size = size; p.life = life; p.maxLife = life;
++        p.uv = MC.Atlas.uv(tile); p.r = r; p.g = g; p.b = b;
++        this.activeCount++;
++        return true;
++      }
++      return false;
++    }
++
++    burst(x, y, z, id, count, kind) {
++      const block = MC.BLOCKS[id] || MC.BLOCKS[MC.Block.STONE];
++      const tile = block.tex ? block.tex.side : MC.BLOCKS[MC.Block.STONE].tex.side;
++      const splash = kind === 'water', hit = kind === 'hit', dust = kind === 'dust';
++      for (let i = 0; i < count; i++) {
++        const a = Math.random() * Math.PI * 2;
++        const speed = 0.7 + Math.random() * 1.7;
++        this.emit(x + (Math.random() - 0.5) * 0.6,
++          y + (Math.random() - 0.5) * 0.5,
++          z + (Math.random() - 0.5) * 0.6,
++          Math.cos(a) * speed * (dust ? 0.25 : 1),
++          dust ? 0.25 + Math.random() * 0.4 : splash ? 1.8 + Math.random() * 1.5 : 1.1 + Math.random() * 1.4,
++          Math.sin(a) * speed * (dust ? 0.25 : 1),
++          0.055 + Math.random() * 0.085, dust ? 0.25 : 0.35 + Math.random() * 0.45,
++          tile, hit ? 1 : splash ? 0.68 : 1,
++          hit ? 0.16 : splash ? 0.84 : 1,
++          hit ? 0.16 : 1);
++      }
++    }
++
++    update(dt, world) {
++      if (!this.enabled || !this.activeCount) return;
++      const step = Math.min(dt, 0.06);
++      for (const p of this.pool) {
++        if (!p.alive) continue;
++        p.life -= step;
++        p.vy -= 8.5 * step;
++        p.x += p.vx * step; p.y += p.vy * step; p.z += p.vz * step;
++        if (p.life <= 0 || p.y < 0 || MC.Block.isSolid(world.getBlock(
++          Math.floor(p.x), Math.floor(p.y - p.size * 0.4), Math.floor(p.z)))) {
++          p.alive = false;
++          this.activeCount--;
++        }
++      }
++    }
++
++    render(renderer, cam) {
++      if (!this.enabled || !this.activeCount) return;
++      let count = 0;
++      const data = this.data;
++      for (const p of this.pool) {
++        if (!p.alive) continue;
++        const o = count * STRIDE, uv = p.uv;
++        data[o] = p.x; data[o + 1] = p.y; data[o + 2] = p.z;
++        data[o + 3] = p.size;
++        data[o + 4] = uv[0]; data[o + 5] = uv[1]; data[o + 6] = uv[2]; data[o + 7] = uv[3];
++        data[o + 8] = p.r; data[o + 9] = p.g; data[o + 10] = p.b;
++        data[o + 11] = Math.min(0.95, p.life / p.maxLife);
++        count++;
++      }
++      const gl = this.gl;
++      gl.useProgram(this.prog);
++      gl.uniformMatrix4fv(this.uVP, false, renderer.vp);
++      gl.uniform1f(this.uPointScale, renderer.canvas.height /
++        (2 * Math.tan((cam.fov || 65) * Math.PI / 360)));
++      gl.activeTexture(gl.TEXTURE0);
++      gl.bindTexture(gl.TEXTURE_2D, renderer.texture);
++      gl.uniform1i(this.uTex, 0);
++      gl.bindBuffer(gl.ARRAY_BUFFER, this.vbo);
++      gl.bufferSubData(gl.ARRAY_BUFFER, 0, data, 0, count * STRIDE);
++      gl.bindVertexArray(this.vao);
++      gl.enable(gl.BLEND);
++      gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
++      gl.depthMask(false);
++      gl.drawArrays(gl.POINTS, 0, count);
++      gl.depthMask(true);
++      gl.disable(gl.BLEND);
++      gl.bindVertexArray(null);
++    }
++  }
++
++  MC.Particles = Particles;
++})();
+--- /dev/null
++++ b/tests/verify.js
+@@ -0,0 +1,234 @@
++/* verify.js — 无依赖的逻辑回归测试：node tests/verify.js */
++const fs = require('fs');
++const path = require('path');
++const vm = require('vm');
++const assert = require('assert');
++
++const root = path.resolve(__dirname, '..');
++const canvas = () => ({
++  getContext: () => ({
++    createImageData: (w, h) => ({ data: new Uint8ClampedArray(w * h * 4) }),
++    putImageData: () => {}
++  })
++});
++const context = vm.createContext({
++  console, Math, Uint8Array, Uint32Array, Uint8ClampedArray, Float32Array,
++  Int16Array, Map, Set, Array, window: {}, document: { createElement: canvas }
++});
++for (const file of ['noise', 'blocks', 'world', 'mesher', 'renderer',
++  'items', 'crafting', 'particles', 'minimap']) {
++  const source = fs.readFileSync(path.join(root, 'js', file + '.js'), 'utf8');
++  vm.runInContext(source, context, { filename: file + '.js' });
++}
++const MC = context.window.MC;
++
++function chunk(cx, cz) {
++  return {
++    cx, cz, blocks: new Uint8Array(36864), light: new Uint8Array(36864),
++    generated: true, dirty: false,
++    get(x, y, z) { return this.blocks[(y * 16 + z) * 16 + x]; }
++  };
++}
++function lightWorld(minX, maxX, minZ, maxZ) {
++  const world = Object.create(MC.World.prototype);
++  world.chunks = new Map();
++  world.lightSources = new Map();
++  world.edits = new Map();
++  world.editIndex = new Map();
++  for (let cz = minZ; cz <= maxZ; cz++) {
++    for (let cx = minX; cx <= maxX; cx++) {
++      world.chunks.set(cx + ',' + cz, chunk(cx, cz));
++    }
++  }
++  return world;
++}
++
++assert.equal(MC.BLOCKS.length, 40);
++assert.equal(MC.ALL_ITEMS.length, 80);
++assert.equal(MC.RECIPES.length, 36);
++assert.equal(MC.BLOCKS[MC.Block.TORCH].light, 14);
++assert.equal(MC.itemTool(120).maxDur, 59);
++assert.equal(MC.itemTool(140).maxDur, 1561);
++const torchRecipe = MC.RECIPES.find(r => r.out.id === MC.Block.TORCH);
++assert(torchRecipe);
++assert.equal(MC.craftMatch(MC.craftFill(torchRecipe)), torchRecipe);
++assert.equal(MC.craftIngredients(torchRecipe).join(','), '101,100');
++
++// 火把在区块边缘传播、拆除后熄灭，墙后不透光。
++const world = lightWorld(-1, 1, -1, 1);
++world.setBlock(0, 10, 0, MC.Block.TORCH);
++assert.equal(world.getLight(0, 10, 0), 14);
++assert.equal(world.getLight(11, 10, 0), 3);
++world.setBlock(15, 10, 0, MC.Block.TORCH);
++assert.equal(world.getLight(16, 10, 0), 13);
++world.setBlock(15, 10, 0, 0);
++assert.equal(world.getLight(16, 10, 0), 0);
++world.setBlock(0, 10, 0, 0);
++assert.equal(world.getLight(11, 10, 0), 0);
++for (let z = -15; z <= 15; z++) {
++  for (let y = 0; y <= 30; y++) {
++    const c = world.getChunk(0, z >> 4);
++    c.blocks[(y * 16 + (z & 15)) * 16 + 2] = MC.Block.STONE;
++  }
++}
++world.setBlock(0, 10, 0, MC.Block.TORCH);
++assert.equal(world.getLight(3, 10, 0), 0);
++assert.equal(world.getLight(1, 10, 0), 13);
++world.setBlock(0, 10, 0, 0);
++assert.equal(world.getLight(1, 10, 0), 0);
++
++// 网格顶点通道和动物网格在同一布局中保持有效。
++const c = world.getChunk(0, 0);
++c.blocks.fill(0);
++c.light.fill(0);
++c.blocks[(10 * 16) * 16 + 1] = MC.Block.TORCH;
++const mesh = MC.meshChunk(world, c);
++assert.equal(mesh.opaque.verts.length % 10, 0);
++assert(mesh.faces > 0);
++const renderer = Object.create(MC.Renderer.prototype);
++renderer.mobCache = new Map();
++renderer.makeMesh = data => data;
++const mobCube = renderer.getMobCube({
++  top: MC.MOB_TILES.wool, side: MC.MOB_TILES.wool,
++  bottom: MC.MOB_TILES.wool
++});
++assert.equal(mobCube.verts.length, 240);
++assert.equal(mobCube.idx.length, 36);
++
++// 读档和后加载区块只凭 edits 重建方块光。
++const restored = new MC.World(2024, [[1, 140, 1, MC.Block.TORCH]]);
++restored.ensureChunk(0, 0);
++assert.equal(restored.getBlock(1, 140, 1), MC.Block.TORCH);
++assert.equal(restored.getLight(1, 140, 1), 14);
++assert.equal(restored.saveData().edits.length, 1);
++const lazy = new MC.World(2024, [[15, 140, 1, MC.Block.TORCH]]);
++lazy.ensureChunk(0, 0);
++lazy.ensureChunk(1, 0);
++assert.equal(lazy.getLight(16, 140, 1), 13);
++
++// 后放置的实心墙撤去墙后光，挖通后重新传播。
++const barrier = lightWorld(-1, 1, -1, 1);
++barrier.setBlock(0, 10, 0, MC.Block.TORCH);
++assert.equal(barrier.getLight(3, 10, 0), 11);
++for (let z = -15; z <= 15; z++) {
++  for (let y = 0; y <= 30; y++) barrier.setBlock(2, y, z, MC.Block.STONE, false);
++}
++assert.equal(barrier.getLight(3, 10, 0), 0);
++barrier.setBlock(2, 10, 0, 0, false);
++assert(barrier.getLight(3, 10, 0) > 0);
++
++// 重叠光源与区块卸载均能正确撤光。
++const overlap = lightWorld(-1, 1, -1, 1);
++overlap.setBlock(0, 70, 0, MC.Block.TORCH);
++overlap.setBlock(8, 70, 0, MC.Block.TORCH);
++overlap.setBlock(0, 70, 0, 0);
++assert.equal(overlap.getLight(4, 70, 0), 10);
++overlap.setBlock(8, 70, 0, 0);
++assert.equal(overlap.getLight(4, 70, 0), 0);
++const unload = lightWorld(0, 1, 0, 0);
++unload.setBlock(15, 70, 0, MC.Block.TORCH);
++assert.equal(unload.getLight(16, 70, 0), 13);
++unload.unloadChunk(unload.getChunk(0, 0));
++assert.equal(unload.getLight(16, 70, 0), 0);
++
++// 测试 main.js 的实际函数：旧档工具、材料扣除、损坏及存档。
++const main = fs.readFileSync(path.join(root, 'js', 'main.js'), 'utf8');
++function between(start, end) { return main.slice(main.indexOf(start), main.indexOf(end)); }
++const inventoryFactory = new Function('MC', 'state', 'ui', `
++  const MAX_STACK = 64; let dirtySave = false;
++  ${between('  const stack =', '  const START_HOTBAR')}
++  ${between('  function parseStacks', '  const world =')}
++  ${between('  function addToBag', '  function openInventory')}
++  const {toast, showItemName, renderCraftGrid, refreshCraft, paintSlot, sfx} = ui;
++  ${between('  function missingCraftMaterials', '  function putInGrid')}
++  ${between('  function wearHeldTool', '  function resetMine')}
++  return { stack, parseStacks, takeCraft, wearHeldTool };
++`);
++const state = {
++  bag: Array(27).fill(null), hotbar: [null], selected: 0,
++  craftGrid: Array(9).fill(0), craftRecipe: null
++};
++const messages = [];
++const inventory = inventoryFactory(MC, state, {
++  toast: message => messages.push(message), showItemName: () => {},
++  renderCraftGrid: () => {}, refreshCraft: () => {},
++  paintSlot: () => {}, sfx: { noise: () => {} }
++});
++assert.equal(inventory.parseStacks([[120, 1]], 1)[0].dur, 59);
++assert.equal(inventory.parseStacks([[120, 1, 7, 59]], 1)[0].dur, 7);
++state.craftRecipe = torchRecipe;
++state.craftGrid = Array.from(MC.craftFill(torchRecipe));
++inventory.takeCraft();
++assert(messages.at(-1).includes('缺少'));
++state.bag[0] = inventory.stack(101, 2);
++state.bag[1] = inventory.stack(100, 2);
++inventory.takeCraft();
++assert.equal(state.bag[0].count, 1);
++assert.equal(state.bag[1].count, 1);
++assert(state.bag.some(s => s && s.id === MC.Block.TORCH && s.count === 4));
++const toolRecipe = MC.RECIPES.find(r => r.out.id === 120);
++state.bag = Array(27).fill(null);
++state.bag[0] = inventory.stack(MC.Block.PLANKS, 3);
++state.bag[1] = inventory.stack(100, 2);
++state.craftRecipe = toolRecipe;
++inventory.takeCraft();
++const crafted = state.bag.find(s => s && s.id === 120);
++assert(crafted && crafted.dur === 59);
++state.hotbar[0] = crafted;
++for (let i = 0; i < 58; i++) inventory.wearHeldTool();
++assert.equal(state.hotbar[0].dur, 1);
++inventory.wearHeldTool();
++assert.equal(state.hotbar[0], null);
++assert(messages.at(-1).includes('损坏'));
++let savedJson = '';
++const saveFactory = new Function('world', 'state', 'localStorage', `
++  const SAVE_KEY = 'mcweb.save.v1'; let dirtySave = true, lastTimeSave = 0;
++  const toast = () => {};
++  ${between('  function saveWorld', '  setInterval(saveWorld')}
++  return saveWorld;
++`);
++const save = saveFactory({ saveData: () => ({ seed: 2024, edits: [] }) }, {
++  bag: [inventory.stack(120, 1, 17)], hotbar: [inventory.stack(1, 3)],
++  time: 1, summitEggs: []
++}, { setItem: (key, value) => {
++  assert.equal(key, 'mcweb.save.v1'); savedJson = value;
++} });
++save(true);
++assert.equal(JSON.parse(savedJson).inv[0][2], 17);
++
++// 粒子池封顶，碰到地形消失；多个粒子只提交一个绘制调用。
++const pool = Object.create(MC.Particles.prototype);
++pool.enabled = true;
++pool.pool = Array.from({ length: 512 }, () => ({ alive: false }));
++pool.activeCount = 0;
++pool.cursor = 0;
++for (let i = 0; i < 600; i++) {
++  pool.emit(i, 20, 0, 0, 0, 0, 0.1, 1, MC.BLOCKS[3].tex.side, 1, 1, 1);
++}
++assert.equal(pool.activeCount, 512);
++pool.update(0.1, { getBlock: () => MC.Block.STONE });
++assert.equal(pool.activeCount, 0);
++let draws = 0;
++const gl = new Proxy({}, { get(_target, key) {
++  if (['createShader', 'createProgram', 'createVertexArray', 'createBuffer'].includes(key)) return () => ({});
++  if (key === 'getShaderParameter' || key === 'getProgramParameter') return () => true;
++  if (key === 'getUniformLocation') return () => ({});
++  if (key === 'drawArrays') return () => { draws++; };
++  if (typeof key === 'string' && key.toUpperCase() === key) return 1;
++  return () => {};
++} });
++const particles = new MC.Particles({ gl });
++particles.emit(0, 10, 0, 0, 0, 0, 0.1, 1, MC.BLOCKS[3].tex.side, 1, 1, 1);
++particles.emit(1, 10, 0, 0, 0, 0, 0.1, 1, MC.BLOCKS[3].tex.side, 1, 1, 1);
++particles.render({ vp: new Float32Array(16), canvas: { height: 700 }, texture: {} }, { fov: 65 });
++assert.equal(draws, 1);
++
++// 小地图首帧先有低清图，不等待完整 96 行。
++const minimap = new MC.Minimap({
++  biomeField: () => ({}), heightAt: () => 50, biomeAt: () => 'plains'
++}, { classList: {} }, canvas(), {});
++minimap.startBuild({ pos: [0, 60, 0] });
++assert.equal(minimap.previewReady, true);
++assert.equal(minimap.ready, false);
++
++console.log('PASS: 火把/遮光/跨区块/读档、配方/耐久、动物网格、粒子池与单次绘制、小地图预览');

@@ -1,0 +1,576 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+<title>MINECRAFT · Web Edition</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { width: 100%; height: 100%; overflow: hidden; background: #0b0e12; }
+  body {
+    font-family: -apple-system, "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+    color: #e9eef5; user-select: none; cursor: default;
+  }
+  #game { position: fixed; inset: 0; width: 100%; height: 100%; display: block; image-rendering: pixelated; }
+  #vignette {
+    position: fixed; inset: 0; pointer-events: none;
+    background: radial-gradient(ellipse at center, transparent 55%, rgba(0,0,0,.28) 100%);
+  }
+
+  /* ---------- 水下滤镜 ---------- */
+  #underwater {
+    position: fixed; inset: 0; pointer-events: none; z-index: 4;
+    background: radial-gradient(ellipse at center, rgba(44, 118, 200, .16), rgba(8, 40, 92, .55));
+    opacity: 0; transition: opacity .25s;
+  }
+  #underwater.show { opacity: 1; }
+
+  /* ---------- 准星 ---------- */
+  #crosshair {
+    position: fixed; left: 50%; top: 50%; width: 22px; height: 22px; margin: -11px 0 0 -11px;
+    pointer-events: none; opacity: 0; transition: opacity .2s;
+  }
+  #crosshair.show { opacity: 1; }
+  #crosshair::before, #crosshair::after {
+    content: ""; position: absolute; background: rgba(255,255,255,.9);
+    box-shadow: 0 0 2px rgba(0,0,0,.95), 0 0 1px rgba(0,0,0,.9);
+  }
+  #crosshair::before { left: 50%; top: 0; width: 2px; height: 100%; margin-left: -1px; }
+  #crosshair::after { top: 50%; left: 0; height: 2px; width: 100%; margin-top: -1px; }
+  #crosshair.mob::before, #crosshair.mob::after { background: #ff7373; }
+
+  /* ---------- HUD ---------- */
+  #hud {
+    position: fixed; left: 14px; top: 14px; padding: 8px 12px; pointer-events: none;
+    font: 12px/1.7 "SF Mono", Menlo, Consolas, monospace; color: #d7e6c8;
+    background: rgba(8,12,8,.42); border: 1px solid rgba(255,255,255,.10);
+    border-radius: 4px; text-shadow: 0 1px 0 rgba(0,0,0,.8); opacity: 0; transition: opacity .25s;
+  }
+  #hud.show { opacity: 1; }
+  #hud b { color: #fff; font-weight: 600; }
+  #hud .dim { color: #92a58a; }
+  #miniMapWrap { width: 192px; margin-top: 7px; padding-top: 6px; border-top: 1px solid rgba(222,249,255,.22); }
+  #miniMapWrap.hide { display: none; }
+  .miniMapTitle { display: flex; justify-content: space-between; color: #e7fbff; font: 700 11px/1.5 sans-serif; margin-bottom: 4px; }
+  .miniMapTitle span { color: #b9d8e5; font-weight: 500; }
+  #miniMap { display: block; width: 192px; max-width: 100%; height: auto; aspect-ratio: 1; image-rendering: pixelated; border-radius: 6px; }
+  #miniNearest { color: #f8f2d3; font: 11px/1.6 sans-serif; margin-top: 4px; white-space: nowrap; }
+  #hint {
+    position: fixed; right: 14px; top: 14px; pointer-events: none; opacity: 0; transition: opacity .25s;
+    font-size: 12px; color: rgba(255,255,255,.72); text-align: right; line-height: 1.8;
+    text-shadow: 0 1px 2px rgba(0,0,0,.9);
+  }
+  #hint.show { opacity: 1; }
+  kbd {
+    display: inline-block; min-width: 17px; padding: 0 4px; margin: 0 1px;
+    font: 11px/16px "SF Mono", Menlo, monospace; text-align: center;
+    color: #dfe9d2; background: rgba(0,0,0,.45); border: 1px solid rgba(255,255,255,.22);
+    border-bottom-width: 2px; border-radius: 3px;
+  }
+
+  /* ---------- 快捷栏 ---------- */
+  #hotbar {
+    position: fixed; left: 50%; bottom: 18px; transform: translateX(-50%);
+    display: flex; gap: 5px; padding: 5px; border-radius: 6px;
+    background: rgba(8,10,12,.38); border: 1px solid rgba(255,255,255,.10);
+    backdrop-filter: blur(2px); opacity: 0; transition: opacity .25s; pointer-events: none;
+  }
+  #hotbar.show { opacity: 1; }
+  .slot {
+    position: relative; width: 54px; height: 54px; border-radius: 3px;
+    background: rgba(20,24,26,.62); border: 2px solid rgba(0,0,0,.55);
+    box-shadow: inset 0 0 0 1px rgba(255,255,255,.10), inset 0 -8px 14px rgba(0,0,0,.25);
+    display: flex; align-items: center; justify-content: center; transition: transform .1s, border-color .1s;
+  }
+  .slot.sel { border-color: #fff; box-shadow: inset 0 0 0 1px rgba(255,255,255,.35), 0 0 0 2px rgba(255,255,255,.25), 0 4px 10px rgba(0,0,0,.5); transform: translateY(-4px); }
+  .slot canvas { width: 42px; height: 42px; filter: drop-shadow(0 2px 2px rgba(0,0,0,.45)); }
+  .slot .num { position: absolute; left: 4px; top: 1px; font: 10px/1 "SF Mono", monospace; color: rgba(255,255,255,.55); }
+  /* ---------- 手持物品：沿用右下角图标 ---------- */
+  #heldItem {
+    position: fixed; right: -8px; bottom: -18px; width: 196px; height: 196px;
+    pointer-events: none; z-index: 3; will-change: transform;
+    filter: drop-shadow(0 12px 14px rgba(0,0,0,.5));
+  }
+  #heldItemInner { width: 100%; height: 100%; transform-origin: 65% 80%; }
+  #heldItemCanvas { width: 100%; height: 100%; display: block; transform: rotate(-6deg); }
+  #itemName {
+    position: fixed; left: 50%; bottom: 86px; transform: translateX(-50%);
+    font-size: 13px; color: #fff; text-shadow: 0 1px 3px #000; opacity: 0; transition: opacity .35s;
+    pointer-events: none; letter-spacing: .06em;
+  }
+  #itemName.show { opacity: 1; }
+
+  /* ---------- 遮罩 / 面板 ---------- */
+  #overlay {
+    position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;
+    background: radial-gradient(ellipse at center, rgba(6,9,14,.10), rgba(3,5,8,.52));
+    backdrop-filter: blur(1.5px); z-index: 20; transition: opacity .25s;
+  }
+  #overlay.hide { opacity: 0; pointer-events: none; }
+  .panel {
+    width: min(720px, 92vw); padding: 30px 34px 26px; border-radius: 6px;
+    background: linear-gradient(180deg, rgba(38,44,52,.96), rgba(24,28,34,.97));
+    border: 2px solid #0a0c0f; box-shadow: inset 0 0 0 2px rgba(255,255,255,.07), 0 30px 80px rgba(0,0,0,.65);
+    text-align: center;
+  }
+  .logo {
+    font: 900 58px/1 "Arial Black", "Helvetica Neue", Impact, sans-serif; letter-spacing: .04em;
+    color: #e8f5d6; -webkit-text-stroke: 2px #26330f;
+    text-shadow: 0 3px 0 #557a25, 0 5px 0 #2c4210, 0 8px 0 #16230a, 0 14px 30px rgba(0,0,0,.7);
+    transform: scaleY(1.04);
+  }
+  .logo.small { font-size: 40px; }
+  .sub { margin-top: 12px; font-size: 12px; letter-spacing: .34em; color: #93a0ad; text-transform: uppercase; }
+  .bar { margin: 26px auto 8px; width: 86%; height: 10px; border-radius: 2px; background: rgba(0,0,0,.55); border: 1px solid rgba(255,255,255,.12); overflow: hidden; }
+  #barFill { height: 100%; width: 0%; background: linear-gradient(90deg, #6aa832, #9fd455); transition: width .15s; box-shadow: 0 0 12px rgba(150,220,90,.35); }
+  #loadText { font-size: 12px; color: #a9b5c1; letter-spacing: .08em; }
+  .btn {
+    margin-top: 22px; padding: 13px 46px; font: 700 17px/1 inherit; letter-spacing: .12em;
+    color: #f4ffe8; cursor: pointer; border-radius: 4px;
+    background: linear-gradient(180deg, #75b23a, #568c25);
+    border: 2px solid #21360d; border-bottom-width: 5px;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.35), 0 6px 18px rgba(0,0,0,.45);
+    transition: filter .12s, transform .08s, border-bottom-width .08s;
+  }
+  .btn:hover:not(:disabled) { filter: brightness(1.12); }
+  .btn:active:not(:disabled) { transform: translateY(3px); border-bottom-width: 2px; }
+  .btn:disabled { filter: grayscale(.7) brightness(.6); cursor: progress; }
+  .btn.ghost {
+    padding: 9px 20px; font-size: 12px; letter-spacing: .1em; color: #cdd7e2;
+    background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.18);
+    box-shadow: none; margin-top: 0;
+  }
+  .btn.ghost:hover { background: rgba(255,255,255,.11); }
+  .row { display: flex; align-items: center; justify-content: center; gap: 14px; margin-top: 16px; }
+  .seed { font: 11px/1 "SF Mono", Menlo, monospace; color: #7d8996; }
+
+  .foot { margin-top: 20px; font-size: 11px; color: #6f7b88; letter-spacing: .05em; }
+
+  /* ---------- 方块栏 ---------- */
+  #inv {
+    position: fixed; inset: 0; z-index: 30; display: flex; align-items: center; justify-content: center;
+    background: rgba(3,5,8,.66); backdrop-filter: blur(3px); transition: opacity .18s;
+  }
+  #inv.hide { opacity: 0; pointer-events: none; }
+  .invPanel {
+    width: min(600px, 92vw); padding: 22px 24px 24px; border-radius: 6px;
+    background: linear-gradient(180deg, rgba(40,46,54,.98), rgba(26,30,36,.98));
+    border: 2px solid #0a0c0f; box-shadow: inset 0 0 0 2px rgba(255,255,255,.07), 0 24px 60px rgba(0,0,0,.6);
+  }
+  .invTitle { font-size: 14px; letter-spacing: .14em; color: #dbe6f2; margin-bottom: 16px; }
+  .invTitle small { display: block; margin-top: 6px; font-size: 11px; letter-spacing: .04em; color: #8492a0; }
+  .invTabs { display: flex; gap: 8px; margin-bottom: 14px; }
+  .tab {
+    padding: 8px 16px; font: 12px/1 inherit; color: #a8b4c0; cursor: pointer; border-radius: 4px;
+    background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.10);
+  }
+  .tab.sel { color: #eaf6dc; background: rgba(140,200,90,.18); border-color: rgba(170,230,120,.5); }
+  #invGrid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 8px; max-height: 46vh; overflow-y: auto; padding-right: 4px; }
+  .invFoot { display: flex; align-items: center; justify-content: space-between; margin-top: 16px; font-size: 11px; color: #7d8996; }
+  #bagPane.hide, #creativePane.hide { display: none; }
+  .slotGrid { display: grid; grid-template-columns: repeat(9, 52px); gap: 6px; justify-content: center; }
+  .slotGrid.creative { max-height: 42vh; overflow-y: auto; padding: 2px; }
+  .invSlot {
+    width: 52px; height: 52px; position: relative; border-radius: 3px;
+    background: rgba(0,0,0,.28); border: 1px solid rgba(255,255,255,.10);
+    display: flex; align-items: center; justify-content: center; cursor: pointer;
+  }
+  .invSlot:hover { border-color: rgba(170,230,120,.5); background: rgba(140,200,90,.10); }
+  .invSlot.sel { border-color: #cfe8a8; box-shadow: inset 0 0 0 2px rgba(170,230,120,.35); }
+  .invSlot canvas { width: 40px; height: 40px; }
+  .invSlot .cnt {
+    position: absolute; right: 4px; bottom: 1px; font: 11px/1 "SF Mono", monospace;
+    color: #fff; text-shadow: 1px 1px 0 #000;
+  }
+  .hotbarLabel { margin: 16px 0 8px; font-size: 11px; color: #7d8996; text-align: center; }
+  .creativeHint { font-size: 11px; color: #7d8996; margin-bottom: 10px; text-align: center; }
+  #cursorItem {
+    position: fixed; z-index: 60; width: 54px; height: 54px; pointer-events: none;
+    transform: translate(-50%, -50%);
+  }
+  #cursorItem canvas { width: 48px; height: 48px; position: absolute; left: 3px; top: 3px; filter: drop-shadow(0 3px 5px rgba(0,0,0,.55)); }
+  #cursorItem span { position: absolute; right: 1px; bottom: -1px; font: 12px/1 "SF Mono", monospace; color: #fff; text-shadow: 1px 1px 0 #000; }
+  #cursorItem.hide { display: none; }
+  .slot .count {
+    position: absolute; right: 3px; bottom: 2px; font: 11px/1 "SF Mono", monospace;
+    color: #fff; text-shadow: 1px 1px 0 #000; pointer-events: none;
+  }
+  .durability {
+    position: absolute; left: 7px; right: 7px; bottom: 3px; height: 4px;
+    background: rgba(10, 20, 21, .86); border: 1px solid rgba(0, 0, 0, .5);
+    border-radius: 2px; overflow: hidden; pointer-events: none;
+  }
+  .durability i { display: block; height: 100%; border-radius: 1px; }
+  .invSlot .durability { left: 5px; right: 5px; bottom: 3px; }
+  .invItem {
+    padding: 10px 4px 7px; border-radius: 4px; cursor: pointer; text-align: center;
+    background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.10); transition: background .12s, border-color .12s, transform .08s;
+  }
+  .invItem:hover { background: rgba(140,200,90,.16); border-color: rgba(170,230,120,.5); transform: translateY(-2px); }
+  .invItem canvas { width: 44px; height: 44px; display: block; margin: 0 auto 6px; }
+  .invItem span { font-size: 11px; color: #c9d4df; }
+
+  /* ---------- 合成台 ---------- */
+  #craft {
+    position: fixed; inset: 0; z-index: 30; display: flex; align-items: center; justify-content: center;
+    background: rgba(3,5,8,.66); backdrop-filter: blur(3px); transition: opacity .18s;
+  }
+  #craft.hide { opacity: 0; pointer-events: none; }
+  .craftPanel {
+    width: min(760px, 94vw); padding: 22px 24px 18px; border-radius: 6px;
+    background: linear-gradient(180deg, rgba(40,46,54,.98), rgba(26,30,36,.98));
+    border: 2px solid #0a0c0f; box-shadow: inset 0 0 0 2px rgba(255,255,255,.07), 0 24px 60px rgba(0,0,0,.6);
+  }
+  .craftRow { display: flex; align-items: center; justify-content: center; gap: 18px; margin: 6px 0 10px; }
+  .craftGrid { display: grid; grid-template-columns: repeat(3, 54px); gap: 5px; }
+  .craftSlot {
+    width: 54px; height: 54px; border-radius: 3px; display: flex; align-items: center; justify-content: center;
+    background: rgba(0,0,0,.28); border: 1px solid rgba(255,255,255,.10); cursor: pointer; position: relative;
+  }
+  .craftSlot.filled { background: rgba(20,24,28,.7); border-color: rgba(255,255,255,.22); }
+  .craftSlot canvas { width: 42px; height: 42px; }
+  .craftSlot:hover { border-color: rgba(170,230,120,.5); }
+  .craftArrow { font-size: 26px; color: #6d7a88; }
+  .resultSlot {
+    width: 64px; height: 64px; border-radius: 4px; display: flex; align-items: center; justify-content: center;
+    background: rgba(0,0,0,.32); border: 2px solid rgba(255,255,255,.16); cursor: default;
+  }
+  .resultSlot canvas { width: 50px; height: 50px; }
+  .resultSlot.ready { border-color: rgba(170,230,120,.8); box-shadow: 0 0 14px rgba(140,210,90,.35); cursor: pointer; }
+  .resultCount { position: absolute; right: 7px; bottom: 3px; font: 11px/1 "SF Mono", monospace; color: #fff; text-shadow: 0 1px 2px #000; }
+  .craftHint { text-align: center; font-size: 12px; color: #93a0ad; margin-bottom: 14px; min-height: 16px; }
+  .craftSplit { display: flex; gap: 14px; }
+  .recipeList { flex: 1.1; max-height: 240px; overflow-y: auto; display: flex; flex-direction: column; gap: 4px; padding-right: 4px; }
+  .recipeBtn {
+    display: flex; align-items: center; gap: 8px; padding: 5px 8px; border-radius: 4px; cursor: pointer;
+    background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.08); color: #cfd9e3; font-size: 12px;
+  }
+  .recipeBtn:hover { background: rgba(140,200,90,.16); border-color: rgba(170,230,120,.45); }
+  .recipeBtn canvas { width: 24px; height: 24px; }
+  .craftPalette { flex: 1; display: grid; grid-template-columns: repeat(6, 1fr); gap: 6px; max-height: 240px; overflow-y: auto; padding-right: 4px; }
+  .paletteBtn {
+    aspect-ratio: 1; border-radius: 3px; cursor: pointer; display: flex; align-items: center; justify-content: center;
+    background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.09);
+  }
+  .paletteBtn:hover { background: rgba(140,200,90,.16); border-color: rgba(170,230,120,.45); }
+  .paletteBtn canvas { width: 34px; height: 34px; }
+
+  /* ---------- 挖掘进度 ---------- */
+  #minebar {
+    position: fixed; left: 50%; top: calc(50% + 22px); width: 64px; height: 5px; margin-left: -32px;
+    border-radius: 3px; background: rgba(0,0,0,.55); border: 1px solid rgba(255,255,255,.25);
+    opacity: 0; transition: opacity .12s; pointer-events: none; z-index: 9;
+  }
+  #minebar.show { opacity: 1; }
+  #minebar i { display: block; width: 0%; height: 100%; border-radius: 2px; background: linear-gradient(90deg, #d8f0a8, #9fd455); }
+
+  /* ---------- 提示 ---------- */
+  #toast {
+    position: fixed; left: 50%; top: 64px; transform: translateX(-50%) translateY(-6px);
+    padding: 9px 20px; border-radius: 4px; background: rgba(10,14,10,.84);
+    border: 1px solid rgba(150,210,110,.35); color: #dff0c8; font-size: 13px;
+    opacity: 0; pointer-events: none; transition: opacity .25s, transform .25s; z-index: 25;
+    box-shadow: 0 8px 24px rgba(0,0,0,.45);
+  }
+  #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+  #err {
+    position: fixed; left: 10px; bottom: 10px; max-width: 70vw; z-index: 40;
+    font: 11px/1.5 "SF Mono", Menlo, monospace; color: #ffb4b4; white-space: pre-wrap;
+    background: rgba(40,0,0,.8); padding: 8px 10px; border-radius: 4px; display: none;
+  }
+
+  /* ---------- 玻璃界面 ---------- */
+  :root {
+    --glass-edge: rgba(224, 246, 255, .36);
+    --glass-line: rgba(224, 246, 255, .16);
+    --glass-text: #f1f9fc;
+    --glass-muted: #b4cbd5;
+    --glass-accent: #a8e6e6;
+  }
+  #overlay, #inv, #craft {
+    background: radial-gradient(circle at 18% 12%, rgba(119, 194, 214, .15), transparent 42%),
+      linear-gradient(140deg, rgba(3, 17, 29, .48), rgba(3, 13, 25, .70));
+    backdrop-filter: blur(6px) saturate(1.12);
+    -webkit-backdrop-filter: blur(6px) saturate(1.12);
+  }
+  .panel, .invPanel, .craftPanel {
+    position: relative; max-height: calc(100vh - 32px); max-height: calc(100dvh - 32px);
+    overflow-y: auto; border-radius: 22px;
+    background: linear-gradient(145deg, rgba(210, 238, 251, .20), rgba(75, 120, 146, .16) 38%, rgba(8, 28, 44, .72) 100%);
+    border: 1px solid var(--glass-edge);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, .40), inset 0 -1px 0 rgba(220, 248, 255, .10),
+      0 28px 80px rgba(0, 8, 18, .48), 0 0 32px rgba(105, 207, 229, .10);
+    backdrop-filter: blur(26px) saturate(1.45);
+    -webkit-backdrop-filter: blur(26px) saturate(1.45);
+  }
+  .panel::before, .invPanel::before, .craftPanel::before {
+    content: ""; position: absolute; left: 22px; right: 22px; top: 0; height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,.82), transparent);
+    pointer-events: none;
+  }
+  .panel { width: min(760px, 94vw); padding: 32px 34px 24px; }
+  .invPanel { width: min(620px, 94vw); padding: 24px; }
+  .craftPanel { width: min(760px, 94vw); padding: 24px; }
+  .logo {
+    color: #f8fdff; -webkit-text-stroke: 1px rgba(13, 57, 72, .88);
+    text-shadow: 0 2px 0 #a4d1d7, 0 5px 0 #406b78, 0 8px 0 #193744,
+      0 16px 28px rgba(2, 12, 20, .56), 0 0 35px rgba(187, 242, 255, .30);
+  }
+  .sub, .invTitle small, .craftHint { color: var(--glass-muted); }
+  .invTitle { color: var(--glass-text); font-weight: 700; }
+  .foot { color: #9bb9c6; }
+  .bar { background: rgba(2, 18, 31, .44); border-color: var(--glass-line); border-radius: 999px; }
+  #barFill { background: linear-gradient(90deg, #65c8dc, #d9fbff); box-shadow: 0 0 14px rgba(145, 231, 247, .50); }
+  #loadText, .seed, .hotbarLabel, .creativeHint, .invFoot { color: var(--glass-muted); }
+  .btn {
+    color: #f7fdff; border: 1px solid rgba(222, 251, 255, .50); border-bottom-width: 1px;
+    border-radius: 12px;
+    background: linear-gradient(165deg, rgba(211, 249, 255, .38), rgba(73, 158, 182, .31) 56%, rgba(19, 82, 108, .55));
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.52), inset 0 -1px 0 rgba(0,41,64,.24),
+      0 8px 22px rgba(0, 22, 36, .32);
+    backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+    transition: background .15s, transform .12s, box-shadow .15s;
+  }
+  .btn:hover:not(:disabled) { filter: none; background: linear-gradient(165deg, rgba(223, 252, 255, .48), rgba(88, 182, 204, .40), rgba(28, 101, 126, .62)); }
+  .btn:active:not(:disabled) { transform: translateY(2px); border-bottom-width: 1px; }
+  .btn:focus-visible, .tab:focus-visible { outline: 2px solid #d6faff; outline-offset: 3px; }
+  .btn.ghost {
+    color: var(--glass-text); background: rgba(196, 235, 248, .11);
+    border-color: rgba(232, 250, 255, .28); box-shadow: inset 0 1px 0 rgba(255,255,255,.16);
+  }
+  .btn.ghost:hover:not(:disabled) { background: rgba(202, 242, 251, .22); }
+  .row, .invFoot { flex-wrap: wrap; gap: 8px; }
+  .controls { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin: 26px auto 4px; text-align: left; }
+  .controlGroup {
+    min-width: 0; padding: 14px; border-radius: 15px;
+    background: linear-gradient(160deg, rgba(231, 250, 255, .10), rgba(21, 61, 83, .24));
+    border: 1px solid var(--glass-line); box-shadow: inset 0 1px 0 rgba(255,255,255,.12);
+  }
+  .controlHeading { margin: 0 0 10px; color: #e4f6fa; font-size: 12px; font-weight: 700; letter-spacing: .08em; }
+  .controlHeading span { color: #8ed5e1; font: 700 11px/1 "SF Mono", Menlo, monospace; margin-right: 6px; }
+  .keyGrid { display: grid; gap: 5px; }
+  .keyGrid > div { min-width: 0; min-height: 27px; display: flex; align-items: center; gap: 8px; color: #d4e6ec; font-size: 11.5px; }
+  .keyGrid kbd { min-width: 58px; white-space: nowrap; text-align: center; }
+  .keyGrid > div span { min-width: 0; line-height: 1.25; }
+  kbd {
+    color: #f5fcff; background: linear-gradient(160deg, rgba(229, 248, 255, .22), rgba(61, 118, 142, .22));
+    border: 1px solid rgba(226, 247, 255, .32); border-bottom-color: rgba(226, 247, 255, .18);
+    border-radius: 6px; box-shadow: inset 0 1px 0 rgba(255,255,255,.25);
+  }
+  #hud, #hint, #hotbar, #toast {
+    background: linear-gradient(145deg, rgba(204, 238, 250, .19), rgba(7, 32, 49, .57));
+    border: 1px solid var(--glass-edge); border-radius: 14px;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.27), 0 8px 26px rgba(0, 15, 28, .25);
+    backdrop-filter: blur(18px) saturate(1.35);
+    -webkit-backdrop-filter: blur(18px) saturate(1.35);
+  }
+  #hud { padding: 10px 14px; color: #effaff; text-shadow: 0 1px 2px rgba(0,0,0,.55); }
+  #hud .dim { color: #b4d3de; }
+  #hint { padding: 10px 13px; color: #e0f0f5; text-align: left; line-height: 1.9; }
+  .hintTitle { color: #a7e7ef; font-size: 10px; letter-spacing: .16em; font-weight: 700; }
+  #hotbar { gap: clamp(2px, .5vw, 5px); padding: 6px; border-radius: 15px; }
+  .slot {
+    width: clamp(30px, 5.5vw, 54px); height: clamp(30px, 5.5vw, 54px); border-radius: 9px;
+    background: linear-gradient(150deg, rgba(227, 249, 255, .19), rgba(11, 41, 58, .50));
+    border: 1px solid rgba(231, 249, 255, .22);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.22), inset 0 -10px 16px rgba(2,20,34,.20);
+  }
+  .slot.sel {
+    border-color: #d8fbff; background: linear-gradient(150deg, rgba(232, 252, 255, .34), rgba(63, 153, 177, .40));
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.50), 0 0 0 2px rgba(166, 232, 241, .42), 0 7px 18px rgba(0,25,39,.32);
+  }
+  .slot canvas { width: 80%; height: 80%; }
+  .tab, .invSlot, .craftSlot, .resultSlot, .recipeBtn, .paletteBtn {
+    background: linear-gradient(150deg, rgba(226, 247, 255, .13), rgba(12, 46, 66, .35));
+    border: 1px solid var(--glass-line); border-radius: 9px;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.13);
+  }
+  .tab { color: #c8dce5; }
+  .tab.sel, .invSlot.sel, .resultSlot.ready {
+    color: #f7feff; border-color: rgba(195, 247, 255, .72);
+    background: linear-gradient(145deg, rgba(189, 239, 249, .29), rgba(43, 116, 140, .36));
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.32), 0 0 15px rgba(112,216,231,.16);
+  }
+  .invSlot:hover, .craftSlot:hover, .recipeBtn:hover, .paletteBtn:hover {
+    background: rgba(179, 235, 247, .22); border-color: rgba(207, 250, 255, .54);
+  }
+  .slotGrid { grid-template-columns: repeat(9, minmax(0, 1fr)); width: min(100%, 520px); margin-inline: auto; }
+  .invSlot { width: 100%; height: auto; aspect-ratio: 1; }
+  .invSlot canvas { width: 80%; height: 80%; }
+  .craftSlot.filled { background: rgba(150, 213, 230, .17); border-color: rgba(226, 247, 255, .31); }
+  .craftArrow { color: #c3e8ef; }
+  .recipeBtn { color: #e1f0f5; }
+  .recipeList, .craftPalette, .slotGrid.creative { scrollbar-color: rgba(190,235,246,.45) transparent; scrollbar-width: thin; }
+  #minebar { background: rgba(9, 34, 50, .72); border-color: rgba(226,247,255,.39); }
+  #minebar i { background: linear-gradient(90deg, #7bd2e4, #e0fcff); }
+  #toast { color: #effcff; padding: 10px 18px; }
+
+  @media (max-width: 620px) {
+    .logo { font-size: clamp(30px, 9vw, 42px); }
+    .panel, .invPanel, .craftPanel { padding: 20px 16px; border-radius: 17px; }
+    .controls { grid-template-columns: 1fr; margin-top: 18px; }
+    .controlGroup { padding: 11px 13px; }
+    .keyGrid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px; }
+    .keyGrid > div { align-items: flex-start; flex-direction: column; gap: 3px; }
+    .keyGrid kbd { min-width: 0; }
+    .row { gap: 8px; }
+    #hint { top: auto; bottom: 76px; right: 10px; left: 10px; font-size: 10px; }
+    #hud { left: 10px; top: 10px; font-size: 10px; }
+    #miniMapWrap, #miniMap { width: 132px; }
+    .craftSplit { flex-direction: column; }
+    .recipeList { max-height: 130px; }
+    .craftPalette { max-height: 130px; }
+    .craftGrid { grid-template-columns: repeat(3, 44px); }
+    .craftSlot { width: 44px; height: 44px; }
+    .craftSlot canvas { width: 35px; height: 35px; }
+    .resultSlot { width: 56px; height: 56px; }
+    .resultSlot canvas { width: 44px; height: 44px; }
+    #invGrid { grid-template-columns: repeat(4, 1fr); }
+  }
+</style>
+</head>
+<body>
+<canvas id="game"></canvas>
+<div id="vignette"></div>
+<div id="underwater"></div>
+
+<div id="crosshair"></div>
+
+<div id="hud">
+  <div><b id="hPos">0 0 0</b></div>
+  <div class="dim"><span id="hFps">0</span> fps · <span id="hChunks">0</span> 区块 · <span id="hTris">0</span> 面</div>
+  <div class="dim" id="hMode">步行</div>
+  <div id="miniMapWrap">
+    <div class="miniMapTitle">地形地图 <span>金线步道 · M</span></div>
+    <canvas id="miniMap" aria-label="地形小地图，显示玩家、两座雪山和金色登山步道"></canvas>
+    <div id="miniNearest">正在定位雪山…</div>
+  </div>
+</div>
+<div id="hint">
+  <div class="hintTitle">操作速览</div>
+  <div><kbd>WASD</kbd> 移动 · <kbd>空格</kbd> 跳跃 · <kbd>Shift</kbd> 疾跑</div>
+  <div><kbd>左键</kbd> 挖掘 / 攻击 · <kbd>右键</kbd> 放置 · <kbd>1-9</kbd> 切换</div>
+  <div><kbd>E</kbd> 背包 · <kbd>F</kbd> 飞行 · <kbd>M</kbd> 地图 · <kbd>T</kbd> 时段 · <kbd>Esc</kbd> 暂停</div>
+</div>
+
+<div id="hotbar"></div>
+<div id="heldItem" hidden><div id="heldItemInner"><canvas id="heldItemCanvas"></canvas></div></div>
+<div id="itemName"></div>
+<div id="toast"></div>
+
+<div id="overlay">
+  <div class="panel">
+    <div class="logo" id="title">MINECRAFT</div>
+    <div class="sub" id="subtitle">Web Edition · 手写 WebGL 体素引擎</div>
+
+    <div id="loadbox">
+      <div class="bar"><i id="barFill"></i></div>
+      <div id="loadText">正在生成世界…</div>
+    </div>
+
+    <button class="btn" id="primary" disabled>生成中…</button>
+
+    <div class="row" id="metaRow">
+      <button class="btn ghost" id="newWorld">新世界</button>
+      <button class="btn ghost" id="shadowBtn">阴影：开</button>
+      <button class="btn ghost" id="particleBtn">粒子：开</button>
+      <span class="seed" id="seedLabel"></span>
+    </div>
+
+    <div class="controls" aria-label="操作说明">
+      <div class="controlGroup">
+        <div class="controlHeading"><span>01</span> 移动与探索</div>
+        <div class="keyGrid">
+          <div><kbd>W A S D</kbd><span>移动</span></div>
+          <div><kbd>鼠标</kbd><span>环顾</span></div>
+          <div><kbd>空格</kbd><span>跳跃 / 游泳与飞行上升</span></div>
+          <div><kbd>Shift</kbd><span>疾跑 / 飞行下降</span></div>
+          <div><kbd>Ctrl</kbd><span>飞行加速</span></div>
+          <div><kbd>F</kbd><span>飞行（也可双击空格）</span></div>
+          <div><kbd>M</kbd><span>显示 / 隐藏地形地图</span></div>
+          <div><kbd>T</kbd><span>正午 / 日落 / 午夜 / 日出</span></div>
+        </div>
+      </div>
+      <div class="controlGroup">
+        <div class="controlHeading"><span>02</span> 建造与界面</div>
+        <div class="keyGrid">
+          <div><kbd>左键</kbd><span>挖掘方块 / 攻击生物</span></div>
+          <div><kbd>右键</kbd><span>放置 / 使用合成台</span></div>
+          <div><kbd>1–9</kbd><span>选择快捷栏</span></div>
+          <div><kbd>滚轮</kbd><span>切换快捷栏</span></div>
+          <div><kbd>E</kbd><span>背包与创造物品</span></div>
+          <div><kbd>Esc</kbd><span>暂停 / 关闭面板</span></div>
+        </div>
+      </div>
+    </div>
+    <div class="foot">一个连续世界包含全部已实现的地形 · 无限探索 · 自动存档</div>
+  </div>
+</div>
+
+<div id="inv" class="hide">
+  <div class="invPanel">
+    <div class="invTitle">背包<small>点击拿起 / 放下 · 点击快捷栏替换 · E 或 Esc 关闭</small></div>
+    <div class="invTabs">
+      <button class="tab sel" id="tabBag">背包</button>
+      <button class="tab" id="tabCreative">创造模式</button>
+    </div>
+    <div id="bagPane">
+      <div id="bagGrid" class="slotGrid"></div>
+      <div class="hotbarLabel">快捷栏 · 点格子替换 / 交换</div>
+      <div id="invHotbar" class="slotGrid hotbarRow"></div>
+    </div>
+    <div id="creativePane" class="hide">
+      <div class="creativeHint">创造页：无限领取物品 · 点物品拿起，再点背包格子放下</div>
+      <div id="creativeGrid" class="slotGrid creative"></div>
+    </div>
+    <div class="invFoot">
+      <span id="invHint">背包会自动收进挖到的材料</span>
+      <button class="btn ghost" id="invClose">关闭</button>
+    </div>
+  </div>
+</div>
+
+<div id="cursorItem" class="hide">
+  <canvas></canvas>
+  <span></span>
+</div>
+
+<div id="craft" class="hide">
+  <div class="craftPanel">
+    <div class="invTitle">合成台<small>点配方预览 · 点成品时从背包扣材料 · E 或 Esc 关闭</small></div>
+    <div class="craftRow">
+      <div id="craftGrid" class="craftGrid"></div>
+      <div class="craftArrow">→</div>
+      <div id="craftResult" class="resultSlot"></div>
+    </div>
+    <div class="craftHint" id="craftHint">选择一个配方，或手动摆放材料</div>
+    <div class="craftSplit">
+      <div class="recipeList" id="recipeList"></div>
+      <div class="craftPalette" id="craftPalette"></div>
+    </div>
+    <div class="invFoot">
+      <span>材料从背包扣除 · 成品放入背包 · 创造页可领取材料</span>
+      <button class="btn ghost" id="craftClose">关闭</button>
+    </div>
+  </div>
+</div>
+
+<div id="minebar"><i id="minefill"></i></div>
+
+<div id="err"></div>
+
+<script src="js/noise.js?v=58"></script>
+<script src="js/blocks.js?v=59"></script>
+<script src="js/world.js?v=59"></script>
+<script src="js/mesher.js?v=59"></script>
+<script src="js/renderer.js?v=59"></script>
+<script src="js/particles.js?v=59"></script>
+<script src="js/viewmodel.js?v=58"></script>
+<script src="js/player.js?v=58"></script>
+<script src="js/items.js?v=59"></script>
+<script src="js/crafting.js?v=59"></script>
+<script src="js/mobs.js?v=58"></script>
+<script src="js/minimap.js?v=59"></script>
+<script src="js/main.js?v=59"></script>
+</body>
+</html>
