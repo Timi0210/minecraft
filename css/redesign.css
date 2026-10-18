@@ -230,3 +230,152 @@ kbd { color: var(--cream); background: rgba(235, 241, 223, .10); border: 1px sol
   .readBody { margin: 8px 22px 18px; font-size: 13px; line-height: 1.95; }
   .readTop, .readFoot { padding-left: 22px; padding-right: 22px; }
 }
+
+/* ---------- 手机触屏操作 ---------- */
+body.touch-mode { overscroll-behavior: none; }
+body.touch-mode #hint,
+body.touch-mode #heldItem,
+body.touch-mode #itemName { display: none !important; }
+body.touch-mode #hotbar {
+  z-index: 9; pointer-events: auto; touch-action: manipulation;
+  bottom: calc(6px + env(safe-area-inset-bottom, 0px));
+}
+body.touch-mode #crosshair { z-index: 9; width: 21px; height: 21px; margin: -10.5px 0 0 -10.5px; }
+body.touch-mode .slot { cursor: pointer; }
+
+#touch {
+  position: fixed; inset: 0; z-index: 8; display: none;
+  pointer-events: none; touch-action: none;
+  -webkit-user-select: none; user-select: none;
+}
+body.touch-mode #touch:not(.hide) { display: block; }
+#touchLook {
+  position: absolute; inset: 0; pointer-events: auto; touch-action: none;
+  background: transparent;
+}
+#stickBase {
+  position: absolute; left: max(16px, env(safe-area-inset-left, 0px));
+  bottom: calc(72px + env(safe-area-inset-bottom, 0px));
+  width: 120px; height: 120px; border-radius: 50%;
+  border: 1px solid rgba(240, 248, 226, .38);
+  background: radial-gradient(circle at 42% 36%, rgba(226, 247, 236, .20), rgba(12, 39, 38, .52));
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,.08), 0 8px 24px rgba(0, 18, 20, .34);
+  backdrop-filter: blur(5px);
+  pointer-events: auto; touch-action: none; z-index: 2;
+}
+#stickBase::before {
+  content: ""; position: absolute; inset: 34%; border-radius: 50%;
+  border: 1px dashed rgba(240, 248, 226, .22);
+}
+#stickKnob {
+  position: absolute; left: 34px; top: 34px; width: 52px; height: 52px; border-radius: 50%;
+  background: radial-gradient(circle at 38% 32%, rgba(246, 253, 238, .72), rgba(150, 201, 168, .44));
+  border: 1px solid rgba(255,255,255,.52);
+  box-shadow: 0 4px 12px rgba(0, 20, 22, .38), inset 0 1px 2px rgba(255,255,255,.42);
+  transition: transform .06s linear; will-change: transform;
+}
+#stickBase.active { border-color: rgba(245, 252, 225, .72); }
+#stickBase.active #stickKnob { transition: none; }
+
+#touchBtns {
+  position: absolute; right: max(12px, env(safe-area-inset-right, 0px));
+  bottom: calc(78px + env(safe-area-inset-bottom, 0px));
+  width: 200px; height: 218px; z-index: 2; pointer-events: none;
+}
+.touchBtn {
+  position: absolute; width: 54px; height: 54px; padding: 0; border-radius: 50%;
+  color: #f7fbe9; font: 700 19px/1 "PingFang SC", sans-serif;
+  background: linear-gradient(155deg, rgba(221, 246, 237, .28), rgba(12, 43, 42, .62));
+  border: 1px solid rgba(240, 250, 227, .48);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.30), 0 7px 18px rgba(0, 18, 20, .34);
+  backdrop-filter: blur(6px);
+  pointer-events: auto; touch-action: none; cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.touchBtn.big { width: 66px; height: 66px; font-size: 24px; }
+.touchBtn:active, .touchBtn.active {
+  transform: scale(.93);
+  background: linear-gradient(155deg, rgba(240, 255, 232, .52), rgba(38, 108, 92, .72));
+  border-color: rgba(255, 255, 255, .78);
+}
+#touchMine { left: 0; bottom: 0; }
+#touchJump { right: 0; bottom: 0; }
+#touchPlace { left: 0; bottom: 78px; }
+#touchFly { right: 0; bottom: 78px; }
+#touchMenu { left: 0; bottom: 150px; }
+#touchBag { right: 0; bottom: 150px; }
+#touchDown { right: 0; bottom: 222px; display: none; }
+body.touch-mode.flying #touchDown { display: block; }
+#touchDown.hide { display: none; }
+
+#touchHint {
+  position: absolute; left: 50%; top: calc(70px + env(safe-area-inset-top, 0px));
+  transform: translateX(-50%);
+  max-width: min(88vw, 520px); padding: 9px 14px; border-radius: 999px;
+  color: #eef8e8; font-size: 11px; letter-spacing: .03em; white-space: nowrap;
+  background: rgba(11, 35, 33, .62); border: 1px solid rgba(240, 248, 226, .30);
+  backdrop-filter: blur(8px); pointer-events: none; opacity: 0;
+  transition: opacity .5s; text-align: center;
+}
+#touchHint.show { opacity: 1; }
+#touchHint.fade { opacity: 0; }
+
+.deviceHint {
+  margin-top: 12px; color: #b9cfc0; font-size: 11px; letter-spacing: .03em;
+}
+.deviceHint b { color: var(--gold); font-weight: 700; }
+.mobileHelp {
+  margin-top: 7px; color: #a9c1b2; font-size: 11px; line-height: 1.7;
+}
+
+@media (max-width: 520px) {
+  #touchBtns { transform: scale(.92); transform-origin: bottom right; }
+  #touchHint { font-size: 10px; white-space: normal; }
+}
+@media (max-height: 480px) {
+  #stickBase { width: 96px; height: 96px; bottom: calc(60px + env(safe-area-inset-bottom, 0px)); }
+  #stickKnob { width: 42px; height: 42px; left: 27px; top: 27px; }
+  #touchBtns { transform: scale(.84); transform-origin: bottom right; bottom: calc(66px + env(safe-area-inset-bottom, 0px)); }
+  body.touch-mode #touchHint { top: calc(150px + env(safe-area-inset-top, 0px)); }
+}
+
+/* 触屏安全区：刘海与 Home 指示条 */
+body.touch-mode #hud { top: calc(12px + env(safe-area-inset-top, 0px)); left: max(12px, env(safe-area-inset-left, 0px)); }
+body.touch-mode #miniMapWrap { top: calc(12px + env(safe-area-inset-top, 0px)); right: max(10px, env(safe-area-inset-right, 0px)); }
+body.touch-mode #touchHint { top: calc(190px + env(safe-area-inset-top, 0px)); }
+
+/* 手机上把提示放到地图下方，避免挡住手绘地图。 */
+@media (max-width: 760px) {
+  body.touch-mode #touchHint { top: calc(190px + env(safe-area-inset-top, 0px)); }
+  body.touch-mode .slot { width: clamp(32px, 9vw, 40px); height: clamp(32px, 9vw, 40px); }
+  body.touch-mode .slot canvas { width: 82%; height: 82%; }
+  body.touch-mode .miniMapTitle span { display: none; }
+}
+@media (max-height: 480px) {
+  body.touch-mode #touchHint { top: calc(150px + env(safe-area-inset-top, 0px)); }
+}
+
+/* 横屏矮屏：动作按钮排成一行，避免和右上角地图重叠。 */
+@media (max-height: 480px) {
+  #stickBase { bottom: calc(70px + env(safe-area-inset-bottom, 0px)); }
+  #touchBtns {
+    left: auto; right: max(8px, env(safe-area-inset-right, 0px));
+    top: auto; bottom: calc(66px + env(safe-area-inset-bottom, 0px));
+    width: auto; height: auto; display: flex; align-items: center; gap: 6px;
+    transform: none;
+  }
+  #touchMenu, #touchBag, #touchFly, #touchDown, #touchPlace, #touchJump, #touchMine {
+    left: auto; right: auto; top: auto; bottom: auto;
+  }
+  .touchBtn, .touchBtn.big {
+    position: relative; inset: auto;
+    width: clamp(40px, 6.5vw, 54px); height: clamp(40px, 6.5vw, 54px);
+    font-size: 17px;
+  }
+  .touchBtn.big { width: clamp(44px, 7vw, 58px); height: clamp(44px, 7vw, 58px); font-size: 22px; }
+  #touchDown { display: none; }
+  body.touch-mode.flying #touchDown { display: block; }
+}
+
+/* 引导提示出现时先收起准星，避免提示条压住准星。 */
+body.touch-mode.touch-hint #crosshair { opacity: 0 !important; }

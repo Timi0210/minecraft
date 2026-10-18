@@ -167,15 +167,16 @@
       this.inWater = MC.Block.isLiquid(w.getBlock(fx, bodyY, fz)) ||
                      MC.Block.isLiquid(w.getBlock(fx, feetY, fz));
 
-      let mx = 0, mz = 0;
+      // 键盘是 8 个方向；触屏摇杆直接给出一个长度 0–1 的向量。
+      let mx = input.moveX || 0, mz = input.moveZ || 0;
       if (input.forward) { mx -= Math.sin(this.yaw); mz -= Math.cos(this.yaw); }
       if (input.back) { mx += Math.sin(this.yaw); mz += Math.cos(this.yaw); }
       if (input.left) { mx -= Math.cos(this.yaw); mz += Math.sin(this.yaw); }
       if (input.right) { mx += Math.cos(this.yaw); mz -= Math.sin(this.yaw); }
       const len = Math.hypot(mx, mz);
-      if (len > 0) { mx /= len; mz /= len; }
+      if (len > 1) { mx /= len; mz /= len; }
 
-      this.sprinting = !!input.sprint && len > 0;
+      this.sprinting = !!input.sprint && len > 0.12;
       let speed = this.sprinting ? 6.1 : 4.4;
       if (this.flying) speed = this.sprinting ? 20 : 10.5;
       else if (this.inWater) speed *= 0.62;

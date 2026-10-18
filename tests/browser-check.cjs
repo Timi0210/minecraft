@@ -27,7 +27,9 @@ const { chromium } = require(process.env.MC_PLAYWRIGHT_PATH || 'playwright-core'
       objective: !!document.querySelector('#objective'),
       tracked: 'tracked' in __mc.state,
       expedition: 'expedition' in __mc,
-      eggs: __mc.secrets.list().length
+      eggs: __mc.secrets.list().length,
+      touchMode: __mc.touchMode,
+      touchDisplay: getComputedStyle(document.querySelector('#touch')).display
     }));
     assert.equal(removed.compass, false);
     assert.equal(removed.journal, false);
@@ -35,6 +37,8 @@ const { chromium } = require(process.env.MC_PLAYWRIGHT_PATH || 'playwright-core'
     assert.equal(removed.tracked, false);
     assert.equal(removed.expedition, false);
     assert(removed.eggs >= 12);
+    assert.equal(removed.touchMode, false);
+    assert.equal(removed.touchDisplay, 'none');
 
     // 走到原点，右键读石碑：打开纸质手记并记入存档。
     const origin = await page.evaluate(() => __mc.world.sites.find(s => s.type === 'origin'));

@@ -17,7 +17,8 @@
         resolution: [0.65, 0.85, 1].includes(v.resolution) ? v.resolution : 1,
         fov: Number.isFinite(v.fov) ? Math.max(55, Math.min(95, v.fov)) : 65,
         shadows: typeof v.shadows === 'boolean' ? v.shadows : true,
-        particles: typeof v.particles === 'boolean' ? v.particles : true
+        particles: typeof v.particles === 'boolean' ? v.particles : true,
+        inputMode: ['auto', 'touch', 'mouse'].includes(v.inputMode) ? v.inputMode : 'auto'
       };
     }
     set(key, value) {

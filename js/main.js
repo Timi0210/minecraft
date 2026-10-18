@@ -95,6 +95,24 @@
   let storage = null;
   try { storage = window.localStorage; } catch (_) { /* 隐私模式下仍可游玩。 */ }
   const settings = new MC.Settings(storage);
+
+  // 触屏设备检测：iPadOS 的 UA 是 Macintosh，所以看 maxTouchPoints + coarse。
+  const coarsePointer = window.matchMedia && window.matchMedia('(pointer: coarse)').matches;
+  const mobileUA = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
+  // iPadOS 13+ 默认伪装成 Macintosh，只能靠触点数认出来。
+  const iPadOS = /Macintosh/.test(navigator.userAgent) && (navigator.maxTouchPoints || 0) > 1;
+  const finePointer = window.matchMedia && window.matchMedia('(pointer: fine)').matches;
+  const touchCapable = mobileUA || iPadOS || ((navigator.maxTouchPoints || 0) > 0 && coarsePointer);
+  // 纯触屏设备不提供「键鼠」选项，避免选完没有输入方式；触屏笔记本三种都保留。
+  const inputCycle = touchCapable && !finePointer ? ['auto', 'touch']
+    : touchCapable ? ['auto', 'touch', 'mouse'] : ['auto', 'mouse'];
+  let inputMode = settings.values.inputMode;
+  if (!inputCycle.includes(inputMode)) {
+    inputMode = 'auto';
+    settings.set('inputMode', 'auto');
+  }
+  let touchMode = inputMode === 'touch' || (inputMode === 'auto' && touchCapable);
+
   let RENDER_R = settings.values.distance;
   renderer.resolutionScale = settings.values.resolution;
   renderer.shadowEnabled = settings.values.shadows;
@@ -125,7 +143,8 @@
       saved.explored.filter(p => Array.isArray(p) && Number.isFinite(p[0]) && Number.isFinite(p[1]))
         .slice(-640) : [],
     debug: false,
-    wasInWater: false
+    wasInWater: false,
+    touchMode
   };
   if (saved && saved.seed === seed) {
     if (Array.isArray(saved.hotbar)) state.hotbar = parseStacks(saved.hotbar, 9);
@@ -134,7 +153,10 @@
   const minimap = new MC.Minimap(world, $('miniMapWrap'), $('miniMap'), state);
   let secrets = null;
   const keys = Object.create(null);
-  const input = { forward: false, back: false, left: false, right: false, jump: false, descend: false, sprint: false };
+  const input = { forward: false, back: false, left: false, right: false,
+    jump: false, descend: false, sprint: false, moveX: 0, moveZ: 0 };
+  const touchState = { stickX: 0, stickY: 0, jump: false, descend: false,
+    lookId: null, lookX: 0, lookY: 0, stickId: null };
 
   /* ================= 音效 ================= */
   /* 每种方块一套音色：噪声中心频率 / Q / 音量 / 低音敲击 */
@@ -407,6 +429,21 @@
   const auroraEl = $('aurora');
   const meteorsEl = $('meteors');
   const flashEl = $('flash');
+  const touchEl = $('touch');
+  const touchLookEl = $('touchLook');
+  const stickBaseEl = $('stickBase');
+  const stickKnobEl = $('stickKnob');
+  const touchHintEl = $('touchHint');
+  const touchMineEl = $('touchMine');
+  const touchPlaceEl = $('touchPlace');
+  const touchJumpEl = $('touchJump');
+  const touchFlyEl = $('touchFly');
+  const touchDownEl = $('touchDown');
+  const touchBagEl = $('touchBag');
+  const touchMenuEl = $('touchMenu');
+  const inputBtn = $('inputBtn');
+  const deviceHint = $('deviceHint');
+  const mobileHelp = $('mobileHelp');
   const heldItemEl = $('heldItem');
   const heldItemInner = $('heldItemInner');
   const heldItemCanvas = $('heldItemCanvas');
@@ -437,6 +474,7 @@
   }
 
   function hideOverlay() {
+    syncTouchUI();
     overlay.classList.add('hide');
     crosshair.classList.add('show');
     hudEl.classList.add('show');
@@ -1286,6 +1324,7 @@
   });
 
   window.addEventListener('mousemove', (e) => {
+    if (touchMode) return;
     if (document.pointerLockElement !== canvas) return;
     if (state.mode !== 'playing') return;
     const s = 0.0022;
@@ -1297,6 +1336,7 @@
   });
 
   canvas.addEventListener('mousedown', (e) => {
+    if (touchMode) return;
     if (state.mode !== 'playing') return;
     if (!state.auto && document.pointerLockElement !== canvas) {
       requestLock();
@@ -1330,7 +1370,7 @@
     const locked = document.pointerLockElement === canvas;
     if (locked) {
       if (state.mode === 'menu' || state.mode === 'paused') startGame();
-    } else if (state.mode === 'playing' && !state.auto) {
+    } else if (state.mode === 'playing' && !state.auto && !touchMode) {
       pauseGame();
     }
   });
@@ -1338,9 +1378,228 @@
     if (state.mode === 'playing') toast('点击画面锁定鼠标');
   });
 
+  /* ================= 触屏操作 ================= */
+  let touchHintTimer = null;
+
+  function updateInputUI() {
+    const isAuto = inputMode === 'auto';
+    inputBtn.textContent = isAuto ? '操作：自动' : inputMode === 'touch' ? '操作：手机触屏' : '操作：键鼠';
+    const names = { auto: '自动', touch: '手机触屏', mouse: '键鼠' };
+    inputBtn.title = '自动检测触屏设备；点击切换 ' + inputCycle.map(m => names[m]).join(' / ');
+    deviceHint.textContent = isAuto
+      ? '自动检测到' + (touchCapable ? '触屏设备' : '键鼠设备') +
+        ' · 当前使用' + (touchMode ? '手机操作' : '电脑操作')
+      : '操作方式：' + (touchMode ? '手机触屏' : '键鼠') + '（点击上方按钮切换）';
+    mobileHelp.hidden = !touchMode;
+    state.touchMode = touchMode;
+  }
+
+  function resetTouchControls() {
+    touchState.stickX = 0;
+    touchState.stickY = 0;
+    touchState.jump = false;
+    touchState.descend = false;
+    touchState.stickId = null;
+    touchState.lookId = null;
+    stickKnobEl.style.transform = '';
+    stickBaseEl.classList.remove('active');
+    for (const el of [touchMineEl, touchPlaceEl, touchJumpEl, touchDownEl]) el.classList.remove('active');
+    // 桌面模式不要碰鼠标状态，否则会打断长按挖掘。
+    if (touchMode) state.mouseDown[0] = state.mouseDown[1] = false;
+  }
+
+  function syncTouchUI() {
+    const active = touchMode && state.mode === 'playing';
+    document.body.classList.toggle('touch-mode', touchMode);
+    document.body.classList.toggle('flying', player.flying);
+    touchEl.classList.toggle('hide', !active);
+    touchFlyEl.classList.toggle('active', player.flying);
+    if (!active) resetTouchControls();
+  }
+
+  function showTouchHint() {
+    if (!touchMode) return;
+    clearTimeout(touchHintTimer);
+    document.body.classList.add('touch-hint');
+    touchHintEl.classList.remove('fade');
+    touchHintEl.classList.add('show');
+    touchHintTimer = setTimeout(() => {
+      touchHintEl.classList.add('fade');
+      touchHintTimer = setTimeout(() => {
+        touchHintEl.classList.remove('show', 'fade');
+        document.body.classList.remove('touch-hint');
+      }, 600);
+    }, 4600);
+  }
+
+  function setInputMode(mode) {
+    if (!inputCycle.includes(mode)) return;
+    settings.set('inputMode', mode);
+    inputMode = mode;
+    touchMode = mode === 'touch' || (mode === 'auto' && touchCapable);
+    if (touchMode) {
+      state.mouseDown[0] = state.mouseDown[1] = false;
+      if (document.pointerLockElement) document.exitPointerLock();
+    } else if (state.mode === 'playing') {
+      requestLock();
+    }
+    updateInputUI();
+    syncTouchUI();
+    toast(touchMode ? '手机触屏操作' : '键鼠操作');
+  }
+
+  function bindTouchHold(el, down, up) {
+    let held = false;
+    const start = (e) => {
+      if (!touchMode || held) return;
+      e.preventDefault();
+      held = true;
+      el.classList.add('active');
+      try { el.setPointerCapture(e.pointerId); } catch (_) { /* synthetic / old browser */ }
+      if (down) down(e);
+    };
+    const end = () => {
+      if (!held) return;
+      held = false;
+      el.classList.remove('active');
+      if (up) up();
+    };
+    el.addEventListener('pointerdown', start);
+    el.addEventListener('pointerup', end);
+    el.addEventListener('pointercancel', end);
+    el.addEventListener('lostpointercapture', end);
+  }
+
+  function bindTouchTap(el, action) {
+    el.addEventListener('pointerdown', (e) => {
+      if (!touchMode) return;
+      e.preventDefault();
+      el.classList.add('active');
+      try { el.setPointerCapture(e.pointerId); } catch (_) { /* ignore */ }
+      action();
+      setTimeout(() => el.classList.remove('active'), 120);
+    });
+  }
+
+  /* 视角：在右侧/空白区域拖动 */
+  touchLookEl.addEventListener('pointerdown', (e) => {
+    if (!touchMode || state.mode !== 'playing' || touchState.lookId !== null) return;
+    e.preventDefault();
+    touchState.lookId = e.pointerId;
+    touchState.lookX = e.clientX;
+    touchState.lookY = e.clientY;
+    try { touchLookEl.setPointerCapture(e.pointerId); } catch (_) { /* ignore */ }
+  });
+  touchLookEl.addEventListener('pointermove', (e) => {
+    if (e.pointerId !== touchState.lookId) return;
+    e.preventDefault();
+    const dx = e.clientX - touchState.lookX;
+    const dy = e.clientY - touchState.lookY;
+    touchState.lookX = e.clientX;
+    touchState.lookY = e.clientY;
+    player.yaw -= dx * 0.0042;
+    player.pitch -= dy * 0.0042;
+    const lim = Math.PI / 2 - 0.02;
+    if (player.pitch > lim) player.pitch = lim;
+    if (player.pitch < -lim) player.pitch = -lim;
+  });
+  const endLook = (e) => {
+    if (e.pointerId !== touchState.lookId) return;
+    touchState.lookId = null;
+  };
+  touchLookEl.addEventListener('pointerup', endLook);
+  touchLookEl.addEventListener('pointercancel', endLook);
+  touchLookEl.addEventListener('lostpointercapture', endLook);
+
+  /* 摇杆：左拇指，0–1 的模拟量 */
+  function stickStart(e) {
+    if (!touchMode || state.mode !== 'playing' || touchState.stickId !== null) return;
+    e.preventDefault();
+    touchState.stickId = e.pointerId;
+    const rect = stickBaseEl.getBoundingClientRect();
+    touchState.stickCx = rect.left + rect.width / 2;
+    touchState.stickCy = rect.top + rect.height / 2;
+    touchState.stickMax = rect.width * 0.36;
+    stickBaseEl.classList.add('active');
+    try { stickBaseEl.setPointerCapture(e.pointerId); } catch (_) { /* ignore */ }
+    stickMove(e);
+  }
+  function stickMove(e) {
+    if (e.pointerId !== touchState.stickId) return;
+    e.preventDefault();
+    let dx = e.clientX - touchState.stickCx;
+    let dy = e.clientY - touchState.stickCy;
+    const len = Math.hypot(dx, dy);
+    const max = touchState.stickMax || 1;
+    if (len > max) { dx = dx / len * max; dy = dy / len * max; }
+    touchState.stickX = dx / max;
+    touchState.stickY = dy / max;
+    stickKnobEl.style.transform = 'translate(' + dx.toFixed(1) + 'px,' + dy.toFixed(1) + 'px)';
+  }
+  function stickEnd(e) {
+    if (e.pointerId !== touchState.stickId) return;
+    touchState.stickId = null;
+    touchState.stickX = 0;
+    touchState.stickY = 0;
+    stickKnobEl.style.transform = '';
+    stickBaseEl.classList.remove('active');
+  }
+  stickBaseEl.addEventListener('pointerdown', stickStart);
+  stickBaseEl.addEventListener('pointermove', stickMove);
+  stickBaseEl.addEventListener('pointerup', stickEnd);
+  stickBaseEl.addEventListener('pointercancel', stickEnd);
+  stickBaseEl.addEventListener('lostpointercapture', stickEnd);
+
+  /* 动作按钮 */
+  bindTouchHold(touchMineEl,
+    () => { state.mouseDown[0] = true; state.breakTimer = 0; swingHand(); },
+    () => { state.mouseDown[0] = false; });
+  bindTouchHold(touchPlaceEl,
+    () => {
+      state.mouseDown[1] = true;
+      state.placeTimer = 0;
+      doPlace();
+      // 立即放一次；之后交给 handleHold 每 0.24 秒重复。
+      state.placeTimer = 0.24;
+      if (state.mode !== 'playing') state.mouseDown[1] = false;
+    },
+    () => { state.mouseDown[1] = false; });
+  bindTouchHold(touchJumpEl,
+    () => { touchState.jump = true; },
+    () => { touchState.jump = false; });
+  bindTouchHold(touchDownEl,
+    () => { touchState.descend = true; },
+    () => { touchState.descend = false; });
+  bindTouchTap(touchFlyEl, () => {
+    const f = player.toggleFly();
+    toast(f ? '飞行模式 开' : '飞行模式 关');
+    syncTouchUI();
+  });
+  bindTouchTap(touchBagEl, () => openInventory());
+  bindTouchTap(touchMenuEl, () => pauseGame());
+
+  hotbarEl.addEventListener('pointerup', (e) => {
+    if (!touchMode) return;
+    const slot = e.target.closest ? e.target.closest('.slot') : null;
+    if (!slot) return;
+    const i = Number(slot.dataset.index);
+    if (Number.isInteger(i)) selectSlot(i);
+  });
+
+  inputBtn.addEventListener('click', () => {
+    const next = inputCycle[(inputCycle.indexOf(inputMode) + 1) % inputCycle.length];
+    setInputMode(next);
+  });
+  window.addEventListener('blur', resetTouchControls);
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) resetTouchControls();
+  });
+  updateInputUI();
+  syncTouchUI();
+
   /* ================= 开始 / 暂停 ================= */
   function requestLock() {
-    if (state.auto) return;
+    if (state.auto || touchMode) return;
     try {
       const p = canvas.requestPointerLock();
       if (p && typeof p.catch === 'function') {
@@ -1358,6 +1617,8 @@
     player.unstuck();
     mobManager.populate(player.pos, 4);
     selectSlot(state.selected, true);
+    syncTouchUI();
+    if (touchMode) showTouchHint();
   }
 
   function pauseGame() {
@@ -1366,6 +1627,7 @@
     state.mouseDown[0] = state.mouseDown[1] = false;
     for (const k in keys) keys[k] = false;
     showPause();
+    syncTouchUI();
     saveWorld();
   }
 
@@ -1508,6 +1770,21 @@
     input.jump = !!keys.Space;
     input.descend = !!(keys.ShiftLeft || keys.ShiftRight);
     input.sprint = player.flying ? !!(keys.ControlLeft || keys.ControlRight) : input.descend;
+    input.moveX = 0; input.moveZ = 0;
+    if (touchMode) {
+      const mag = Math.min(1, Math.hypot(touchState.stickX, touchState.stickY));
+      if (mag > 0.12) {
+        // 摇杆的 -y 是前进，+x 是右；换成世界坐标。
+        const fwd = -touchState.stickY;
+        const right = touchState.stickX;
+        input.moveX = -Math.sin(player.yaw) * fwd + Math.cos(player.yaw) * right;
+        input.moveZ = -Math.cos(player.yaw) * fwd - Math.sin(player.yaw) * right;
+        input.forward = input.back = input.left = input.right = false;
+        input.sprint = mag > 0.9;
+      }
+      input.jump = input.jump || touchState.jump;
+      input.descend = input.descend || touchState.descend;
+    }
     return input;
   }
 
@@ -1603,6 +1880,7 @@
       state.mode === 'playing' && !held ? hand : null, particles);
 
     updateHud(dt);
+    syncTouchUI();
     if (state.mode === 'playing') minimap.update(player, dt);
     if (state.mode === 'playing') saveWorld();
   }
@@ -1683,6 +1961,10 @@
 
   window.__mc = {
     world, player, renderer, cam, state, seed, mobManager, sfx, particles,
-    horizon, minimap, secrets, settings, debug, worldRef: world
+    horizon, minimap, secrets, settings, debug, worldRef: world,
+    get touchMode() { return touchMode; },
+    get inputMode() { return inputMode; },
+    touchState,
+    setInputMode
   };
 })();

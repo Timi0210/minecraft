@@ -274,11 +274,14 @@ const settings = new MC.Settings(storage);
 settings.set('distance', 10);
 settings.set('fov', 120);
 settings.set('shadows', false);
+settings.set('inputMode', 'touch');
 assert.equal(new MC.Settings(storage).values.distance, 10);
 assert.equal(new MC.Settings(storage).values.fov, 95);
 assert.equal(new MC.Settings(storage).values.shadows, false);
+assert.equal(new MC.Settings(storage).values.inputMode, 'touch');
 assert.equal(preferences.get('mcweb.save.v1'), 'untouched');
 assert.equal(new MC.Settings(null).values.distance, 8);
+assert.equal(new MC.Settings(null).values.inputMode, 'auto');
 preferences.set('mcweb.settings.v1', '{broken');
 assert.equal(new MC.Settings(storage).values.fov, 65);
 
