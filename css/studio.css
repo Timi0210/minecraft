@@ -1,0 +1,132 @@
+/* 栖野：桌面与触屏各自的操作层。世界画面始终是主角。 */
+:root { --studio-paper: #f9f3e6; --studio-deep: #173b35; --studio-moss: #85aa87; --studio-sun: #e9c77d; }
+body { color: var(--studio-paper); }
+#overlay.hide, #inv.hide, #craft.hide, #read.hide { display: none; }
+#overlay { background: linear-gradient(90deg, rgba(9,30,30,.76), rgba(9,30,30,.18) 72%); }
+.panel { background: rgba(17,48,43,.85); border-color: rgba(251,241,211,.42); }
+.heroContent { padding-top: 48px; }
+.logo { letter-spacing: -.04em; font-size: clamp(76px, 7.5vw, 106px); }
+.sub { color: #e5e8ce; }
+.heroLead { max-width: 455px; color: #c8d8ca; }
+.heroAside { display: flex; flex-direction: column; justify-content: space-between; background: radial-gradient(circle at 80% 0, rgba(235,201,125,.13), transparent 52%), linear-gradient(160deg, rgba(72,112,85,.45), rgba(19,54,49,.85)); }
+.studioSteps { display: grid; gap: 10px; margin: 26px 0; }
+.studioSteps > div { display: grid; grid-template-columns: 31px 1fr; gap: 1px 11px; padding: 14px; border: 1px solid rgba(246,241,216,.21); border-radius: 13px; background: rgba(244,240,214,.055); }
+.studioSteps b { grid-row: 1 / 3; color: var(--studio-sun); font: 700 11px/1.5 "SF Mono", monospace; }
+.studioSteps strong { font-size: 14px; letter-spacing: .05em; }
+.studioSteps span { color: #c4d9c9; font-size: 11px; line-height: 1.7; }
+.asideQuote { font-size: 22px; color: #f4edd5; }
+#primary { background: #e8d6a4; border-color: #f7ebc8; color: #173c33; }
+#primary:hover:not(:disabled) { background: #f5e7bc; color: #173c33; }
+#hotbar .slot .count, #hotbar .slot .durability { display: none; }
+#heldItem { display: none !important; }
+#hint { max-width: 560px; }
+#sceneDock { position: fixed; right: 18px; top: 230px; z-index: 7; display: grid; gap: 7px; opacity: 0; pointer-events: none; transition: opacity .25s; }
+body.is-playing #sceneDock { opacity: 1; pointer-events: auto; }
+#sceneDock button { display: flex; gap: 8px; align-items: center; justify-content: space-between; min-width: 154px; padding: 9px 10px; border: 1px solid rgba(248,240,208,.33); border-radius: 10px; background: rgba(21,53,45,.66); color: #f7f0dd; box-shadow: 0 6px 20px rgba(0,0,0,.13); backdrop-filter: blur(10px); font: 700 11px/1.2 "PingFang SC", sans-serif; cursor: pointer; }
+#sceneDock button:hover { background: rgba(55,95,73,.86); border-color: #efdaa7; }
+#sceneDock button span { color: #f6dd9e; font-size: 17px; line-height: 1; }
+#sceneDock kbd { margin-left: auto; font-size: 10px; }
+
+.studioModal { position: fixed; inset: 0; z-index: 36; display: grid; place-items: center; padding: 18px; background: rgba(8,26,26,.62); backdrop-filter: blur(10px); }
+.studioModal.hide { display: none; }
+.studioSheet { width: min(750px, 100%); max-height: calc(100dvh - 36px); display: flex; flex-direction: column; overflow: hidden; background: #f3efe2; color: #233d31; border: 1px solid #fffaf0; border-radius: 21px; box-shadow: 0 30px 90px rgba(3,23,22,.5); }
+.sheetHead { display: flex; align-items: start; justify-content: space-between; gap: 15px; padding: 25px 30px 18px; border-bottom: 1px solid rgba(39,75,54,.16); }
+.sheetHead small { color: #668975; font: 800 10px/1 sans-serif; letter-spacing: .2em; }
+.sheetHead h2 { margin: 5px 0 3px; color: #1c4031; font: 800 30px/1.2 "Songti SC", serif; }
+.sheetHead p { color: #637968; font-size: 12px; line-height: 1.5; }
+.sheetHead button { width: 36px; height: 36px; flex: 0 0 auto; border-radius: 50%; border: 1px solid #c9d3c1; background: #fffdf5; color: #315542; font-size: 24px; cursor: pointer; }
+.sheetHead button:hover { background: #e0e9da; }
+.sheetFoot { padding: 13px 30px 18px; color: #718371; font-size: 11px; border-top: 1px solid rgba(39,75,54,.12); }
+.paletteTabs { display: flex; gap: 7px; overflow-x: auto; padding: 16px 30px 7px; flex: 0 0 auto; }
+.paletteTabs button { white-space: nowrap; padding: 8px 13px; border: 1px solid #cbd6c8; border-radius: 99px; background: #fffdf6; color: #466a54; font: 700 12px/1 "PingFang SC", sans-serif; cursor: pointer; }
+.paletteTabs button.sel { color: #f8f4e7; border-color: #295b47; background: #295b47; }
+.landscapeGrid { display: grid; grid-template-columns: repeat(6, minmax(0,1fr)); gap: 9px; padding: 16px 30px 26px; overflow-y: auto; }
+.landscapeItem { min-width: 0; display: flex; flex-direction: column; align-items: center; gap: 7px; padding: 10px 4px; border: 1px solid #d3dccc; border-radius: 12px; background: #fffdf6; color: #315540; font: 700 11px/1.2 "PingFang SC", sans-serif; cursor: pointer; }
+.landscapeItem:hover, .landscapeItem:focus-visible { border-color: #82aa8a; background: #ebf3e6; transform: translateY(-2px); }
+.landscapeItem canvas { display: block; width: 46px; height: 46px; image-rendering: pixelated; }
+.landscapeItem span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
+.gallerySheet { width: min(880px, 100%); }
+.galleryGrid { min-height: 220px; display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 17px; overflow-y: auto; padding: 22px 30px 30px; }
+.galleryEmpty { grid-column: 1 / -1; align-self: center; padding: 50px 18px; text-align: center; color: #607967; line-height: 1.9; }
+.galleryEmpty b { display: block; margin-bottom: 8px; font: 800 28px/1 "Songti SC",serif; color: #3e684d; }
+.photoCard { min-width: 0; padding: 8px; border-radius: 13px; background: #fffdf5; border: 1px solid #d9ded1; }
+.photoCard img { display: block; width: 100%; aspect-ratio: 16 / 10; object-fit: contain; border-radius: 8px; background: #d5e0d4; }
+.photoCardMeta { display: flex; justify-content: space-between; align-items: center; gap: 6px; padding: 10px 3px 2px; }
+.photoCardMeta strong { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #294c3d; font-size: 12px; }
+.photoCardMeta div { display: flex; gap: 6px; flex-shrink: 0; }
+.photoCardMeta button { border: 1px solid #ccd9ca; border-radius: 7px; background: #f2f7ee; color: #365b46; padding: 6px 7px; font: 700 10px/1 "PingFang SC", sans-serif; cursor: pointer; }
+.photoCardMeta button:hover { background: #e0edde; }
+
+#photoMode { position: fixed; inset: 0; z-index: 30; color: #fffaf0; pointer-events: none; }
+#photoMode.hide { display: none; }
+#photoMode::before { content: ""; position: absolute; inset: 0; background: linear-gradient(180deg, rgba(7,28,27,.39), transparent 18%, transparent 74%, rgba(7,28,27,.48)); pointer-events: none; }
+#photoLook { position: absolute; inset: 0; z-index: 0; pointer-events: auto; touch-action: none; cursor: grab; }
+#photoLook:active { cursor: grabbing; }
+.photoTop, .photoBottom { position: absolute; left: 22px; right: 22px; display: flex; align-items: center; gap: 16px; z-index: 2; pointer-events: none; text-shadow: 0 2px 12px #102b28; }
+.photoTop { top: 20px; justify-content: space-between; font-weight: 800; }
+.photoTop > div { display: flex; gap: 7px; pointer-events: auto; }
+.photoTop small { margin-left: 8px; color: #f7e9c8; font: 700 9px sans-serif; letter-spacing: .18em; }
+.photoTop button { pointer-events: auto; padding: 9px 14px; border: 1px solid #e9e7d6; border-radius: 8px; background: rgba(20,52,44,.65); color: white; cursor: pointer; }
+.photoFrame { position: absolute; inset: 8% 7% 20%; border: 1px solid rgba(249,246,229,.34); pointer-events: none; }
+.photoFrame i { position: absolute; width: 28px; height: 28px; border-color: #fff6de; border-style: solid; }
+.photoFrame i:nth-child(1) { left: -1px; top: -1px; border-width: 3px 0 0 3px; }
+.photoFrame i:nth-child(2) { right: -1px; top: -1px; border-width: 3px 3px 0 0; }
+.photoFrame i:nth-child(3) { left: -1px; bottom: -1px; border-width: 0 0 3px 3px; }
+.photoFrame i:nth-child(4) { right: -1px; bottom: -1px; border-width: 0 3px 3px 0; }
+.photoBottom { bottom: 25px; justify-content: center; }
+.photoBottom > div { position: absolute; left: 0; font: 700 12px/1.5 "PingFang SC", sans-serif; }
+.photoBottom label { display: flex; gap: 9px; align-items: center; font-size: 11px; pointer-events: auto; }
+.photoBottom input { width: 110px; accent-color: #f4d690; }
+#photoShutter { width: 62px; height: 62px; padding: 6px; border: 2px solid #fff9eb; border-radius: 50%; background: rgba(16,45,38,.52); box-shadow: 0 5px 25px rgba(0,0,0,.3); pointer-events: auto; cursor: pointer; }
+#photoShutter span { display: block; width: 100%; height: 100%; border-radius: 50%; background: #fff7e6; }
+#photoShutter:active { transform: scale(.93); }
+.photoTip { position: absolute; right: 0; font-size: 11px; }
+body.photo-active #hud, body.photo-active #hotbar, body.photo-active #hint, body.photo-active #sceneDock, body.photo-active #crosshair, body.photo-active #touch { opacity: 0 !important; pointer-events: none !important; }
+body.photo-active #vignette { opacity: 0; }
+body.touch-mode #sceneDock { display: none; }
+#touchQuick { display: none; }
+body.touch-mode #touchQuick { position: absolute; top: calc(215px + env(safe-area-inset-top,0px)); right: max(12px, env(safe-area-inset-right,0px)); display: flex; flex-direction: column; gap: 7px; z-index: 3; pointer-events: auto; }
+body.touch-mode #touchQuick button { width: 76px; min-height: 42px; border: 1px solid rgba(249,243,214,.51); border-radius: 9px; background: rgba(25,60,49,.74); color: #fff5da; font: 800 17px/1 "PingFang SC", sans-serif; backdrop-filter: blur(8px); touch-action: manipulation; }
+body.touch-mode #touchQuick button span { font-size: 10px; margin-left: 2px; }
+
+@media (max-width: 760px) {
+  .panel { width: calc(100vw - 22px); }
+  .heroContent { padding: 28px 23px 24px; }
+  .logo { font-size: clamp(58px, 15vw, 76px); }
+  .heroLead { margin-top: 18px; font-size: 13px; }
+  .panelTop, .panelFoot { padding: 13px 22px; }
+  .sheetHead { padding: 21px 19px 14px; }
+  .sheetHead h2 { font-size: 26px; }
+  .paletteTabs { padding: 12px 19px 6px; }
+  .landscapeGrid { grid-template-columns: repeat(4, minmax(0,1fr)); padding: 12px 19px 20px; }
+  .sheetFoot { padding: 12px 19px; }
+  .galleryGrid { grid-template-columns: 1fr; padding: 16px 19px 24px; }
+  body.touch-mode #hotbar { bottom: calc(8px + env(safe-area-inset-bottom,0px)); }
+  body.touch-mode #hotbar .slot { width: clamp(30px, 8.8vw, 39px); height: clamp(30px, 8.8vw, 39px); }
+  body.touch-mode #miniMapWrap { width: 112px; }
+  body.touch-mode #miniMap { width: 94px; }
+  body.touch-mode #touchQuick { top: calc(145px + env(safe-area-inset-top,0px)); right: max(10px, env(safe-area-inset-right,0px)); gap: 6px; }
+  body.touch-mode #touchQuick button { width: 68px; min-height: 38px; }
+  body.touch-mode #touchHint { top: auto; bottom: calc(345px + env(safe-area-inset-bottom,0px)); max-width: 72vw; }
+  .photoTop, .photoBottom { left: 14px; right: 14px; }
+  .photoTop small { display: none; }
+  .photoTop button { padding: 8px 9px; font-size: 11px; }
+  .photoFrame { inset: 8% 4% 19%; }
+  .photoBottom { bottom: calc(23px + env(safe-area-inset-bottom,0px)); flex-direction: column; gap: 9px; }
+  .photoBottom > div, .photoTip { display: none; }
+  #photoShutter { width: 64px; height: 64px; }
+}
+@media (max-height: 500px) {
+  .panel { max-height: calc(100dvh - 12px); }
+  .heroContent { padding-top: 19px; }
+  .heroLead { margin-top: 10px; }
+  .studioSteps { margin: 12px 0; gap: 5px; }
+  .studioSteps > div { padding: 8px; }
+  body.touch-mode #miniMapWrap { display: none; }
+  body.touch-mode #touchQuick { top: calc(48px + env(safe-area-inset-top,0px)); right: 10px; flex-direction: row; }
+  body.touch-mode #touchQuick button { width: 58px; }
+  body.touch-mode #touchQuick button span { display: none; }
+  body.touch-mode #touchHint { display: none; }
+  .photoFrame { inset: 11% 5% 26%; }
+  .photoBottom { bottom: 8px; flex-direction: row; }
+}

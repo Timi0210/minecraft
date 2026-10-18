@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
-<title>远野 · 开放世界</title>
+<title>栖野 · 一座可以亲手布置的世界</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   html, body { width: 100%; height: 100%; overflow: hidden; background: #0b0e12; }
@@ -428,6 +428,7 @@
   }
 </style>
 <link rel="stylesheet" href="css/redesign.css?v=9">
+<link rel="stylesheet" href="css/studio.css?v=1">
 </head>
 <body>
 <canvas id="game"></canvas>
@@ -437,7 +438,7 @@
 <div id="crosshair"></div>
 
 <div id="hud">
-  <div class="worldMark"><span class="markCube">◇</span><span>远野<small>VOXEL FRONTIER</small></span></div>
+  <div class="worldMark"><span class="markCube">✦</span><span>栖野<small>WILD STUDIO</small></span></div>
   <div class="placeLine"><b id="hMode">探索中</b><span id="hActivity">步行 · 12:00</span></div>
   <div id="debugStats"><b id="hPos">0 0 0</b> · <span id="hFps">0</span> fps · <span id="hChunks">0</span> 区块 · <span id="hTris">0</span> 面</div>
   <div id="miniMapWrap">
@@ -446,7 +447,13 @@
   </div>
 </div>
 <div id="hint">
-  <span><kbd>WASD</kbd> 移动</span><span><kbd>鼠标</kbd> 建造</span><span><kbd>E</kbd> 背包</span><span><kbd>右键</kbd> 阅读石碑</span><span><kbd>F</kbd> 飞行</span>
+  <span><kbd>WASD</kbd> 漫游</span><span><kbd>鼠标</kbd> 布置风景</span><span><kbd>Tab</kbd> 点击工具</span><span><kbd>E</kbd> 素材</span><span><kbd>P</kbd> 拍照</span><span><kbd>G</kbd> 相册</span>
+</div>
+<div id="sceneDock" aria-label="景观工具">
+  <button id="dockPalette" type="button"><span>▦</span> 素材 <kbd>E</kbd></button>
+  <button id="dockPhoto" type="button"><span>◎</span> 拍照 <kbd>P</kbd></button>
+  <button id="dockGallery" type="button"><span>▤</span> 相册 <kbd>G</kbd></button>
+  <button id="dockTime" type="button"><span>☀</span> 换时光 <kbd>T</kbd></button>
 </div>
 
 <div id="hotbar"></div>
@@ -459,27 +466,32 @@
   <div id="stickBase" aria-label="移动摇杆"><div id="stickKnob"></div></div>
   <div id="touchBtns">
     <button class="touchBtn" id="touchMenu" type="button" aria-label="暂停">☰</button>
-    <button class="touchBtn" id="touchBag" type="button" aria-label="背包">包</button>
+    <button class="touchBtn" id="touchBag" type="button" aria-label="景观素材">▦</button>
     <button class="touchBtn" id="touchFly" type="button" aria-label="飞行">✈</button>
     <button class="touchBtn" id="touchDown" type="button" aria-label="下降">↓</button>
     <button class="touchBtn big" id="touchPlace" type="button" aria-label="放置">▣</button>
     <button class="touchBtn big" id="touchJump" type="button" aria-label="跳跃">↑</button>
     <button class="touchBtn big" id="touchMine" type="button" aria-label="挖掘">⛏</button>
   </div>
-  <div id="touchHint">左摇杆移动 · 右侧拖动看 · ⛏ 长按挖掘 · ▣ 放置</div>
+  <div id="touchQuick" aria-label="手机景观工具">
+    <button id="touchPhoto" type="button" aria-label="拍照">◎ <span>拍照</span></button>
+    <button id="touchGallery" type="button" aria-label="相册">▤ <span>相册</span></button>
+    <button id="touchTime" type="button" aria-label="切换时段">☀ <span>时光</span></button>
+  </div>
+  <div id="touchHint">左手移动 · 右手看风景 · ▣ 放置 · ⛏ 拆除 · ◎ 拍照</div>
 </div>
 
 <div id="overlay">
   <div class="panel">
-    <div class="panelTop"><span><span class="markCube">◇</span> 远野计划 / FIELD NOTES</span><span class="seed" id="seedLabel"></span></div>
+    <div class="panelTop"><span><span class="markCube">✦</span> 栖野 / WILD STUDIO</span><span class="seed" id="seedLabel"></span></div>
     <div class="heroGrid">
       <section class="heroContent">
-        <div class="eyebrow">没有任务，只有远方</div>
-        <div class="logo" id="title">远野</div>
-        <div class="sub" id="subtitle">一方世界，无限远方</div>
-        <p class="heroLead">从湖畔醒来。没有目的地，也没有人告诉你该做什么。<br>往任何方向走——世界在远处留了几样东西，等你自己发现。</p>
+        <div class="eyebrow">漫游 · 造景 · 留影</div>
+        <div class="logo" id="title">栖野</div>
+        <div class="sub" id="subtitle">把喜欢的风景，变成自己的世界</div>
+        <p class="heroLead">翻过山，看一场日落。在湖边搭起小屋，换一种光，再给此刻拍张照片。这里没有任务和等级，只有你想留下的风景。</p>
         <div id="loadbox"><div class="bar"><i id="barFill"></i></div><div id="loadText">正在生成世界…</div></div>
-        <button class="btn" id="primary" disabled>正在准备旅程…</button>
+        <button class="btn" id="primary" disabled>正在铺开风景…</button>
         <div class="row" id="metaRow">
           <button class="btn ghost" id="newWorld">生成新世界</button>
           <button class="btn ghost" id="shadowBtn">阴影：开</button>
@@ -487,7 +499,7 @@
           <button class="btn ghost" id="inputBtn" title="切换手机触屏 / 键鼠操作">操作：自动</button>
         </div>
         <p class="deviceHint" id="deviceHint"></p>
-        <p class="mobileHelp" id="mobileHelp" hidden>手机操作：左摇杆移动，右侧拖动看，⛏ 长按挖掘，▣ 放置。横屏更舒服。</p>
+        <p class="mobileHelp" id="mobileHelp" hidden>手机操作：左手移动，右手环顾；▣ 放置、⛏ 拆除，顶部可以拍照。横屏视野更开阔。</p>
         <details class="graphicsSettings">
           <summary>画面设置 <span>即时生效 · 自动记住</span></summary>
           <div class="graphicsGrid">
@@ -498,14 +510,41 @@
           <p>简化远山延伸至约 440 格；降低清晰度只影响游戏画面，界面保持清晰。</p>
         </details>
       </section>
-      <aside class="heroAside" aria-label="旅途预览">
-        <div class="asideLabel">开放世界 / 没有路线</div>
-        <div class="asideMap"><span class="mapLake">◯</span><span class="mapPin p1">?</span><span class="mapPin p2">?</span><span class="mapPin p3">?</span><span class="mapPin p4">?</span></div>
-        <div class="asideQuote">“地图上的空白，<br>等你亲自走过。”</div>
-        <div class="asideTags"><span>不设任务</span><span>不讲终点</span><span>自己找路</span><span>留了秘密</span></div>
+      <aside class="heroAside" aria-label="玩法介绍">
+        <div class="asideLabel">你的世界，从一个念头开始</div>
+        <div class="studioSteps">
+          <div><b>01</b><strong>去走走</strong><span>森林、雪山、海岸和昼夜，会给你不同的灵感。</span></div>
+          <div><b>02</b><strong>布置一处角落</strong><span>素材随取随用。铺路、搭屋、点灯，都由你决定。</span></div>
+          <div><b>03</b><strong>留住这一刻</strong><span>调整时光，按下快门，把风景放进相册。</span></div>
+        </div>
+        <div class="asideQuote">“世界很大，<br>先在喜欢的地方停下。”</div>
       </aside>
     </div>
-    <div class="panelFoot"><span>自动保存 · 离开后从原地继续</span><details class="controlsDisclosure"><summary>操作指南 ↗</summary><div class="controls"><span><kbd>WASD</kbd> 移动 · 鼠标环顾</span><span><kbd>左键</kbd> 挖掘或攻击 · <kbd>右键</kbd> 放置</span><span><kbd>E</kbd> 背包 · <kbd>右键</kbd> 阅读石碑 · <kbd>M</kbd> 地图</span><span><kbd>F</kbd> 飞行 · <kbd>T</kbd> 时段 · <kbd>F3</kbd> 调试</span><span><kbd>Esc</kbd> 暂停 · 数字键切换快捷栏</span><span>手机：左摇杆移动 · 右侧拖动视角 · ⛏ / ▣ 操作</span></div></details></div>
+    <div class="panelFoot"><span>世界与照片保存在这台设备上</span><details class="controlsDisclosure"><summary>操作指南 ↗</summary><div class="controls"><span><kbd>WASD</kbd> 移动 · 鼠标环顾</span><span><kbd>左键</kbd> 拆除 · <kbd>右键</kbd> 放置</span><span><kbd>E</kbd> 素材 · <kbd>P</kbd> 拍照 · <kbd>G</kbd> 相册</span><span><kbd>F</kbd> 飞行 · <kbd>T</kbd> 时段 · <kbd>M</kbd> 地图</span><span><kbd>Tab</kbd> 释放鼠标点工具 · <kbd>Esc</kbd> 暂停</span><span>手机：左手移动 · 右手看风景 · 点击按钮操作</span></div></details></div>
+  </div>
+</div>
+
+<div id="palette" class="studioModal hide" role="dialog" aria-label="景观素材" aria-modal="true">
+  <div class="studioSheet paletteSheet">
+    <div class="sheetHead"><div><small>BUILD YOUR PLACE</small><h2>景观素材</h2><p>选一种材料，放进当前快捷格。随取随用。</p></div><button id="paletteClose" type="button" aria-label="关闭素材">×</button></div>
+    <div id="paletteTabs" class="paletteTabs"></div>
+    <div id="paletteGrid" class="landscapeGrid"></div>
+    <div class="sheetFoot">左键拆除 · 右键放置 · 素材不消耗</div>
+  </div>
+</div>
+
+<div id="photoMode" class="hide" aria-label="拍照模式">
+  <div id="photoLook"></div>
+  <div class="photoTop"><span>◎ 取景器 <small>WILD STUDIO</small></span><div><button id="photoTime" type="button">☀ 换时光</button><button id="photoClose" type="button">退出 ×</button></div></div>
+  <div class="photoFrame"><i></i><i></i><i></i><i></i></div>
+  <div class="photoBottom"><div id="photoLocation">此刻 · 栖野</div><label>镜头 <input id="photoZoom" type="range" min="35" max="95" value="65"></label><button id="photoShutter" type="button" aria-label="拍摄照片"><span></span></button><span class="photoTip">拖动取景 · 点击快门</span></div>
+</div>
+
+<div id="gallery" class="studioModal hide" role="dialog" aria-label="风景相册" aria-modal="true">
+  <div class="studioSheet gallerySheet">
+    <div class="sheetHead"><div><small>YOUR LITTLE MOMENTS</small><h2>风景相册</h2><p>在这里，找回你为世界按下快门的时刻。</p></div><button id="galleryClose" type="button" aria-label="关闭相册">×</button></div>
+    <div id="galleryGrid" class="galleryGrid"></div>
+    <div class="sheetFoot">照片保存在当前浏览器 · 最多保留 10 张</div>
   </div>
 </div>
 
@@ -575,20 +614,20 @@
 <div id="err"></div>
 
 <script src="js/noise.js?v=59"></script>
-<script src="js/blocks.js?v=64"></script>
-<script src="js/world.js?v=67"></script>
-<script src="js/mesher.js?v=59"></script>
-<script src="js/renderer.js?v=64"></script>
-<script src="js/horizon.js?v=2"></script>
+<script src="js/blocks.js?v=65"></script>
+<script src="js/world.js?v=68"></script>
+<script src="js/mesher.js?v=60"></script>
+<script src="js/renderer.js?v=66"></script>
+<script src="js/horizon.js?v=3"></script>
 <script src="js/particles.js?v=60"></script>
 <script src="js/viewmodel.js?v=58"></script>
 <script src="js/player.js?v=63"></script>
-<script src="js/items.js?v=60"></script>
+<script src="js/items.js?v=61"></script>
 <script src="js/crafting.js?v=59"></script>
 <script src="js/mobs.js?v=59"></script>
 <script src="js/minimap.js?v=64"></script>
 <script src="js/secrets.js?v=5"></script>
 <script src="js/settings.js?v=2"></script>
-<script src="js/main.js?v=70"></script>
+<script src="js/main.js?v=71"></script>
 </body>
 </html>

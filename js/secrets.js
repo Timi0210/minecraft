@@ -37,6 +37,7 @@
       this.mobs = ctx.mobManager;
       this.hooks = ctx.hooks;
       this.debug = !!ctx.debug;
+      this.scenicOnly = !!ctx.scenicOnly;
 
       this.acc = 0;
       this.figure = null;
@@ -124,10 +125,10 @@
       const step = this.acc;
       this.acc = 0;
       this.ambient(step);
-      this.checkFigure();
+      if (!this.scenicOnly) this.checkFigure();
       this.checkMoonSheep();
       this.checkSky();
-      this.checkCave(step);
+      if (!this.scenicOnly) this.checkCave(step);
     }
 
     collect(out) {

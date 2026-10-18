@@ -14,7 +14,8 @@
 
   /* ================= 种子与存档 ================= */
   const params = new URLSearchParams(location.search);
-  const SAVE_KEY = 'mcweb.save.v1';
+  // 栖野单独存档；旧版远野世界仍留在原键，随时可以恢复。
+  const SAVE_KEY = 'mcweb.landscape.v2';
 
   function hashStr(s) {
     let h = 2166136261;
@@ -25,10 +26,10 @@
   let saved = null;
   try { saved = JSON.parse(localStorage.getItem(SAVE_KEY) || 'null'); } catch (e) { saved = null; }
   if (!saved || !Array.isArray(saved.edits)) saved = null;
-  if (saved && saved.terrainVersion !== 4 && saved.edits.length) {
+  if (saved && saved.terrainVersion !== 5) {
     // Terrain changes under old builds; keep a restorable copy before migration.
     try {
-      const backupKey = SAVE_KEY + '.before-terrain-v4';
+      const backupKey = SAVE_KEY + '.before-terrain-v5';
       if (!localStorage.getItem(backupKey)) localStorage.setItem(backupKey, JSON.stringify(saved));
     } catch (e) { /* storage may be unavailable */ }
   }
@@ -49,7 +50,7 @@
     return tool ? { id, count: 1, dur: Number.isFinite(dur) ?
       Math.max(1, Math.min(tool.maxDur, dur)) : tool.maxDur, maxDur: tool.maxDur } : { id, count };
   };
-  const START_HOTBAR = [[1, 64], [2, 64], [3, 64], [4, 64], [5, 64], [7, 64], [9, 64], [19, 1], [20, 64]];
+  const START_HOTBAR = [[1, 64], [9, 64], [7, 64], [8, 64], [10, 64], [29, 64], [28, 64], [36, 64], [39, 64]];
 
   function parseStacks(list, size) {
     const out = new Array(size).fill(null);
@@ -70,6 +71,11 @@
     if (p.length === 3 && p.every(Number.isFinite) &&
         Math.abs(p[0]) < 1000000 && p[1] >= -10 && p[1] < 256 && Math.abs(p[2]) < 1000000) {
       player.pos[0] = p[0]; player.pos[1] = p[1]; player.pos[2] = p[2];
+      if (saved.terrainVersion !== 5 && !saved.player.flying &&
+          !world.isCave(Math.floor(p[0]), Math.floor(p[1]), Math.floor(p[2]))) {
+        const floor = world.heightAt(Math.floor(p[0]), Math.floor(p[2])) + 1.2;
+        if (player.pos[1] < floor - 0.5) player.pos[1] = floor;
+      }
       if (Number.isFinite(saved.player.yaw)) player.yaw = saved.player.yaw;
       if (Number.isFinite(saved.player.pitch)) player.pitch = Math.max(-1.54, Math.min(1.54, saved.player.pitch));
       player.flying = !!saved.player.flying;
@@ -441,6 +447,11 @@
   const touchDownEl = $('touchDown');
   const touchBagEl = $('touchBag');
   const touchMenuEl = $('touchMenu');
+  const paletteEl = $('palette');
+  const galleryEl = $('gallery');
+  const photoEl = $('photoMode');
+  const photoZoomEl = $('photoZoom');
+  const photoLocationEl = $('photoLocation');
   const inputBtn = $('inputBtn');
   const deviceHint = $('deviceHint');
   const mobileHelp = $('mobileHelp');
@@ -453,22 +464,22 @@
 
   function showMenu() {
     overlay.classList.remove('hide');
-    titleEl.textContent = '远野';
+    titleEl.textContent = '栖野';
     titleEl.classList.remove('small');
-    subtitleEl.textContent = '一方世界，无限远方';
+    subtitleEl.textContent = '把喜欢的风景，变成自己的世界';
     loadbox.style.display = 'none';
-    primary.textContent = '进入世界 ↗';
+    primary.textContent = '走进栖野 ↗';
     primary.disabled = false;
     seedLabel.textContent = '种子 ' + seed;
   }
 
   function showPause() {
     overlay.classList.remove('hide');
-    titleEl.textContent = '旅途暂停';
+    titleEl.textContent = '先歇一会儿';
     titleEl.classList.add('small');
-    subtitleEl.textContent = '世界会自动保存在本地';
+    subtitleEl.textContent = '你的风景已自动保存';
     loadbox.style.display = 'none';
-    primary.textContent = '继续探索 ↗';
+    primary.textContent = '继续漫游 ↗';
     primary.disabled = false;
     seedLabel.textContent = '种子 ' + seed;
   }
@@ -580,6 +591,206 @@
       const nm = st ? MC.itemName(st.id) : '';
       if (nm) showItemName(nm);
     }
+  }
+
+  /* ================= 景观素材与风景相册 ================= */
+  const LANDSCAPE_GROUPS = [
+    ['大地', [1, 2, 3, 4, 5, 12, 31, 36, 37, 22]],
+    ['树木', [7, 8, 23, 24, 25, 26, 27, 28, 30]],
+    ['建造', [9, 10, 11, 20, 29, 32, 33, 34, 35]],
+    ['点缀', [39, 43, 21, 38, 6]]
+  ];
+  let paletteGroup = 0;
+  function renderPalette() {
+    const tabs = $('paletteTabs'), grid = $('paletteGrid');
+    tabs.replaceChildren();
+    grid.replaceChildren();
+    LANDSCAPE_GROUPS.forEach(([name], index) => {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = index === paletteGroup ? 'sel' : '';
+      button.textContent = name;
+      button.addEventListener('click', () => { paletteGroup = index; renderPalette(); });
+      tabs.appendChild(button);
+    });
+    for (const id of LANDSCAPE_GROUPS[paletteGroup][1]) {
+      if (!MC.itemBlock(id)) continue;
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'landscapeItem';
+      const icon = document.createElement('canvas');
+      const label = document.createElement('span');
+      label.textContent = MC.itemName(id);
+      MC.itemIcon(icon, id, 88);
+      button.append(icon, label);
+      button.title = '选用 ' + label.textContent;
+      button.addEventListener('click', () => {
+        state.hotbar[state.selected] = stack(id, MAX_STACK);
+        paintSlot(state.selected);
+        selectSlot(state.selected);
+        dirtySave = true;
+        closeInventory(true);
+      });
+      grid.appendChild(button);
+    }
+  }
+
+  const PHOTO_KEY = 'mcweb.landscape.photos.' + seed;
+  let photos = [];
+  try {
+    const parsed = JSON.parse(localStorage.getItem(PHOTO_KEY) || '[]');
+    if (Array.isArray(parsed)) photos = parsed.filter(p => p && typeof p.url === 'string' && typeof p.title === 'string').slice(-10);
+  } catch (_) { /* 无法读取相册时仍可游玩 */ }
+  let galleryReturnMode = 'playing';
+  let pendingPhoto = false;
+  let photoZoom = settings.values.fov;
+
+  function sceneLabel() {
+    const biome = world.biomeAtPlayer(player.pos[0], player.pos[1], player.pos[2]);
+    const minute = Math.floor((12 + state.time / MC.DAY_LENGTH * 24) % 24 * 60);
+    const clock = String(Math.floor(minute / 60)).padStart(2, '0') + ':' + String(minute % 60).padStart(2, '0');
+    return { title: MC.BIOME_NAMES[biome] || '栖野', clock };
+  }
+
+  function openPhoto() {
+    if (state.mode !== 'playing') return;
+    state.mode = 'photo';
+    state.mouseDown[0] = state.mouseDown[1] = false;
+    for (const k in keys) keys[k] = false;
+    photoZoom = settings.values.fov;
+    photoZoomEl.value = photoZoom;
+    const { title, clock } = sceneLabel();
+    photoLocationEl.textContent = title + ' · ' + clock;
+    photoEl.classList.remove('hide');
+    document.body.classList.add('photo-active');
+    if (document.pointerLockElement === canvas) document.exitPointerLock();
+    syncTouchUI();
+  }
+
+  function closePhoto(relock) {
+    if (state.mode !== 'photo') return;
+    state.mode = 'playing';
+    pendingPhoto = false;
+    photoEl.classList.add('hide');
+    document.body.classList.remove('photo-active');
+    syncTouchUI();
+    if (relock) requestLock();
+  }
+
+  function persistPhotos() {
+    if (!photos.length) {
+      try { localStorage.removeItem(PHOTO_KEY); return true; } catch (_) { return false; }
+    }
+    while (photos.length) {
+      try { localStorage.setItem(PHOTO_KEY, JSON.stringify(photos)); return true; }
+      catch (_) { photos.shift(); }
+    }
+    try { localStorage.removeItem(PHOTO_KEY); } catch (_) { /* ignore */ }
+    return false;
+  }
+
+  function capturePhoto() {
+    pendingPhoto = false;
+    try {
+      const scale = Math.min(1, 960 / Math.max(canvas.width, canvas.height));
+      const w = Math.max(1, Math.round(canvas.width * scale));
+      const h = Math.max(1, Math.round(canvas.height * scale));
+      const postcard = document.createElement('canvas');
+      postcard.width = w;
+      postcard.height = h + 54;
+      const ctx = postcard.getContext('2d');
+      ctx.drawImage(canvas, 0, 0, w, h);
+      ctx.fillStyle = '#f5efe0';
+      ctx.fillRect(0, h, w, 54);
+      const { title, clock } = sceneLabel();
+      ctx.fillStyle = '#244537';
+      ctx.font = 'bold 17px sans-serif';
+      ctx.fillText(title + '  ·  ' + clock, 17, h + 34);
+      ctx.textAlign = 'right';
+      ctx.font = 'bold 11px sans-serif';
+      ctx.fillText('栖野  /  WILD STUDIO', w - 17, h + 32);
+      const url = postcard.toDataURL('image/jpeg', .78);
+      photos.push({ id: Date.now() + '-' + Math.random().toString(36).slice(2, 6), title, clock, url });
+      if (photos.length > 10) photos = photos.slice(-10);
+      toast(persistPhotos() ? '这一刻已放进相册' : '照片暂时无法保存');
+    } catch (_) { toast('拍照失败，请再试一次'); }
+  }
+
+  function renderGallery() {
+    const grid = $('galleryGrid');
+    grid.replaceChildren();
+    if (!photos.length) {
+      const empty = document.createElement('div');
+      empty.className = 'galleryEmpty';
+      empty.innerHTML = '<b>还没有照片</b>走进世界，按 P 或点 ◎，给喜欢的风景拍一张。';
+      grid.appendChild(empty);
+      return;
+    }
+    for (const photo of [...photos].reverse()) {
+      const card = document.createElement('article');
+      card.className = 'photoCard';
+      const image = document.createElement('img');
+      image.src = photo.url;
+      image.alt = photo.title + ' ' + photo.clock;
+      const meta = document.createElement('div');
+      meta.className = 'photoCardMeta';
+      const title = document.createElement('strong');
+      title.textContent = photo.title + ' · ' + photo.clock;
+      const actions = document.createElement('div');
+      const download = document.createElement('button');
+      download.type = 'button';
+      download.textContent = '下载';
+      download.addEventListener('click', () => {
+        const a = document.createElement('a');
+        a.href = photo.url;
+        a.download = '栖野-' + photo.title + '-' + photo.clock.replace(':', '-') + '.jpg';
+        a.click();
+      });
+      const remove = document.createElement('button');
+      remove.type = 'button';
+      remove.textContent = '删除';
+      remove.addEventListener('click', () => {
+        photos = photos.filter(p => p.id !== photo.id);
+        persistPhotos();
+        renderGallery();
+      });
+      actions.append(download, remove);
+      meta.append(title, actions);
+      card.append(image, meta);
+      grid.appendChild(card);
+    }
+  }
+
+  function openGallery() {
+    if (state.mode !== 'playing' && state.mode !== 'paused') return;
+    galleryReturnMode = state.mode;
+    state.mode = 'gallery';
+    state.mouseDown[0] = state.mouseDown[1] = false;
+    for (const k in keys) keys[k] = false;
+    renderGallery();
+    galleryEl.classList.remove('hide');
+    if (document.pointerLockElement === canvas) document.exitPointerLock();
+    syncTouchUI();
+  }
+
+  function closeGallery(relock) {
+    if (state.mode !== 'gallery') return;
+    state.mode = galleryReturnMode;
+    galleryEl.classList.add('hide');
+    syncTouchUI();
+    if (relock && state.mode === 'playing') requestLock();
+  }
+
+  function cycleTime() {
+    if (state.mode !== 'playing' && state.mode !== 'photo') return;
+    const quarter = Math.floor(state.time / (MC.DAY_LENGTH / 4));
+    state.time = (quarter + 1) * (MC.DAY_LENGTH / 4);
+    toast(['正午', '金色黄昏', '星夜', '晨光'][(quarter + 1) % 4]);
+    if (state.mode === 'photo') {
+      const { title, clock } = sceneLabel();
+      photoLocationEl.textContent = title + ' · ' + clock;
+    }
+    dirtySave = true;
   }
 
   /* ---------------- 背包 / 快捷栏 ---------------- */
@@ -747,10 +958,10 @@
     state.mode = 'inventory';
     for (const k in keys) keys[k] = false;
     state.mouseDown[0] = state.mouseDown[1] = false;
-    state.invTab = 'bag';
-    renderInv();
-    invEl.classList.remove('hide');
+    renderPalette();
+    paletteEl.classList.remove('hide');
     if (document.pointerLockElement === canvas) document.exitPointerLock();
+    syncTouchUI();
   }
 
   function closeInventory(relock) {
@@ -767,6 +978,8 @@
     }
     state.mode = 'playing';
     invEl.classList.add('hide');
+    paletteEl.classList.add('hide');
+    syncTouchUI();
     if (relock) requestLock();
   }
 
@@ -1018,7 +1231,7 @@
       underwaterEl.classList.toggle('show', under);
       sfx.setUnderwater(under);
     }
-    const targetFov = settings.values.fov + (player.sprinting ? 3 : 0);
+    const targetFov = state.mode === 'photo' ? photoZoom : settings.values.fov + (player.sprinting ? 3 : 0);
     cam.fov += (targetFov - cam.fov) * Math.min(1, dt * 8);
   }
 
@@ -1129,10 +1342,7 @@
     if (!state.mine || state.mine.x !== hit.x || state.mine.y !== hit.y || state.mine.z !== hit.z) {
       state.mine = { x: hit.x, y: hit.y, z: hit.z, progress: 0 };
     }
-    const heldStack = state.hotbar[state.selected];
-    const tool = MC.itemTool(heldStack ? heldStack.id : 0);
-    const speed = (tool && info.tool && tool.type === info.tool) ? tool.speed : 1;
-    state.mine.progress += dt * speed / Math.max(0.12, info.hard);
+    state.mine.progress += dt / 0.18;
     mineBar.classList.add('show');
     mineFill.style.width = Math.min(100, state.mine.progress * 100).toFixed(1) + '%';
     if (state.mine.progress >= 1) {
@@ -1164,40 +1374,16 @@
     }
     if (!world.setBlock(hit.x, hit.y, hit.z, flood ? MC.Block.WATER : 0)) return;
     particles.burst(hit.x + 0.5, hit.y + 0.5, hit.z + 0.5, id, 8 + ((Math.random() * 5) | 0));
-    wearHeldTool();
     rebuildNear(hit.x, hit.z);
     sfx.dig(id);
     swingHand();
     dirtySave = true;
-    const dropId = blockDropId(id);
-    if (dropId) {
-      const got = addToBag(dropId, 1);
-      if (!got) toast('背包已满');
-      else if (info.dropItem) toast('获得 ' + MC.itemName(dropId) + '（已入背包）');
-    }
+    // 栖野的拆建不产生掉落，也不要求玩家管理背包。
   }
 
   function doPlace() {
     const hit = targetInfo();
     if (!hit) return;
-    if (hit.id === MC.Block.TABLE) { openCrafting(); return; }
-    if (hit.id === MC.Block.TABLET || hit.id === MC.Block.GLITCH) {
-      const lore = secrets ? secrets.readLore(hit.x, hit.y, hit.z) : null;
-      if (lore) openRead(lore);
-      return;
-    }
-    if (hit.id === MC.Block.STONE_SWORD) {
-      const lore = secrets ? secrets.swordStone(hit.x, hit.y, hit.z) : null;
-      if (lore) openRead(lore);
-      // 拔出来之后，石头里就只剩下一个孔。
-      if (secrets && secrets.flags.swordPulled &&
-          world.getBlock(hit.x, hit.y, hit.z) === MC.Block.STONE_SWORD) {
-        world.setBlock(hit.x, hit.y, hit.z, 0);
-        rebuildNear(hit.x, hit.z);
-        dirtySave = true;
-      }
-      return;
-    }
     const px = hit.x + hit.nx, py = hit.y + hit.ny, pz = hit.z + hit.nz;
     if (py < 0 || py >= MC.WORLD.HEIGHT) return;
     const cur = world.getBlock(px, py, pz);
@@ -1208,9 +1394,6 @@
     if (!blockId) return;
     if (MC.Block.isSolid(blockId) && (overlapsPlayer(px, py, pz) || overlapsMob(px, py, pz))) return;
     if (world.setBlock(px, py, pz, blockId)) {
-      held.count--;
-      if (held.count <= 0) state.hotbar[state.selected] = null;
-      paintSlot(state.selected);
       rebuildNear(px, pz);
       sfx.place(blockId);
       swingHand();
@@ -1224,14 +1407,7 @@
     if (state.mouseDown[0] && state.swing >= 1) swingHand();
     state.placeTimer -= dt;
     if (state.mouseDown[0]) {
-      const mob = targetMob(targetInfo());
-      if (mob) {
-        resetMine();
-        if (state.attackTimer <= 0) {
-          attackMob(mob);
-          state.attackTimer = 0.48;
-        }
-      } else tryMine(dt);
+      tryMine(dt);
     } else resetMine();
     if (state.mouseDown[1] && state.placeTimer <= 0) {
       doPlace();
@@ -1241,19 +1417,7 @@
 
   /* ================= 输入 ================= */
   let lastSpace = -1;
-
-  const KONAMI = ['ArrowUp', 'ArrowUp', 'ArrowDown', 'ArrowDown',
-    'ArrowLeft', 'ArrowRight', 'ArrowLeft', 'ArrowRight', 'KeyB', 'KeyA'];
-  const konamiBuf = [];
-  function feedKonami(code) {
-    konamiBuf.push(code);
-    if (konamiBuf.length > KONAMI.length) konamiBuf.shift();
-    if (konamiBuf.length !== KONAMI.length) return;
-    if (KONAMI.every((c, i) => c === konamiBuf[i])) {
-      konamiBuf.length = 0;
-      if (secrets) secrets.konami();
-    }
-  }
+  let uiCursor = false;
 
   window.addEventListener('keydown', (e) => {
     if (e.code !== 'Escape' && e.target.matches('input, select, textarea')) return;
@@ -1261,6 +1425,8 @@
     keys[e.code] = true;
     if (e.code === 'Escape') {
       if (state.mode === 'inventory') closeInventory(true);
+      else if (state.mode === 'gallery') closeGallery(true);
+      else if (state.mode === 'photo') closePhoto(true);
       else if (state.mode === 'crafting') closeCrafting(true);
       else if (state.mode === 'reading') closeRead(true);
       else if (state.mode === 'playing') {
@@ -1270,7 +1436,11 @@
       return;
     }
     if (e.repeat) return;
-    if (state.mode === 'menu' || state.mode === 'paused') feedKonami(e.code);
+    if (state.mode === 'photo') {
+      if (e.code === 'Enter' || e.code === 'Space') { e.preventDefault(); pendingPhoto = true; }
+      else if (e.code === 'KeyT') cycleTime();
+      return;
+    }
     if ((e.code === 'KeyE' || e.code === 'KeyJ') && state.mode === 'reading') {
       e.preventDefault(); closeRead(true); return;
     }
@@ -1282,9 +1452,22 @@
     }
     if (state.mode !== 'playing') return;
 
-    if (e.code === 'KeyE') {
+    if (e.code === 'Tab' && !touchMode && !state.auto) {
+      uiCursor = !uiCursor;
+      if (uiCursor) {
+        state.mouseDown[0] = state.mouseDown[1] = false;
+        if (document.pointerLockElement === canvas) document.exitPointerLock();
+        toast('可以点击右侧工具 · 再按 Tab 返回');
+      } else requestLock();
+    } else if (e.code === 'KeyE') {
       e.preventDefault();
       openInventory();
+    } else if (e.code === 'KeyP') {
+      e.preventDefault();
+      openPhoto();
+    } else if (e.code === 'KeyG') {
+      e.preventDefault();
+      openGallery();
     } else if (e.code === 'F3') {
       e.preventDefault();
       state.debug = !state.debug;
@@ -1296,10 +1479,7 @@
       toast(minimap.toggle() ? '手绘地图 已展开' : '手绘地图 已收起');
     } else if (e.code === 'KeyT') {
       e.preventDefault();
-      const quarter = Math.floor(state.time / (MC.DAY_LENGTH / 4));
-      state.time = (quarter + 1) * (MC.DAY_LENGTH / 4);
-      toast(['正午', '日落', '午夜', '日出'][(quarter + 1) % 4]);
-      dirtySave = true;
+      cycleTime();
     } else if (e.code === 'Space') {
       const now = performance.now();
       if (now - lastSpace < 300) {
@@ -1370,7 +1550,7 @@
     const locked = document.pointerLockElement === canvas;
     if (locked) {
       if (state.mode === 'menu' || state.mode === 'paused') startGame();
-    } else if (state.mode === 'playing' && !state.auto && !touchMode) {
+    } else if (state.mode === 'playing' && !state.auto && !touchMode && !uiCursor) {
       pauseGame();
     }
   });
@@ -1411,6 +1591,7 @@
   function syncTouchUI() {
     const active = touchMode && state.mode === 'playing';
     document.body.classList.toggle('touch-mode', touchMode);
+    document.body.classList.toggle('is-playing', state.mode === 'playing');
     document.body.classList.toggle('flying', player.flying);
     touchEl.classList.toggle('hide', !active);
     touchFlyEl.classList.toggle('active', player.flying);
@@ -1577,6 +1758,40 @@
   });
   bindTouchTap(touchBagEl, () => openInventory());
   bindTouchTap(touchMenuEl, () => pauseGame());
+  bindTouchTap($('touchPhoto'), openPhoto);
+  bindTouchTap($('touchGallery'), openGallery);
+  bindTouchTap($('touchTime'), cycleTime);
+
+  $('dockPalette').addEventListener('click', openInventory);
+  $('dockPhoto').addEventListener('click', openPhoto);
+  $('dockGallery').addEventListener('click', openGallery);
+  $('dockTime').addEventListener('click', cycleTime);
+  $('paletteClose').addEventListener('click', () => closeInventory(true));
+  $('galleryClose').addEventListener('click', () => closeGallery(true));
+  $('photoClose').addEventListener('click', () => closePhoto(true));
+  $('photoTime').addEventListener('click', cycleTime);
+  $('photoShutter').addEventListener('click', () => { pendingPhoto = true; });
+  photoZoomEl.addEventListener('input', () => { photoZoom = Number(photoZoomEl.value); });
+  (() => {
+    const look = $('photoLook');
+    let pointer = null, lastX = 0, lastY = 0;
+    look.addEventListener('pointerdown', e => {
+      if (state.mode !== 'photo') return;
+      pointer = e.pointerId;
+      lastX = e.clientX; lastY = e.clientY;
+      look.setPointerCapture(e.pointerId);
+    });
+    look.addEventListener('pointermove', e => {
+      if (pointer !== e.pointerId || state.mode !== 'photo') return;
+      player.yaw -= (e.clientX - lastX) * .003;
+      player.pitch = Math.max(-1.54, Math.min(1.54, player.pitch - (e.clientY - lastY) * .003));
+      lastX = e.clientX; lastY = e.clientY;
+    });
+    const end = e => { if (e.pointerId === pointer) pointer = null; };
+    look.addEventListener('pointerup', end);
+    look.addEventListener('pointercancel', end);
+    look.addEventListener('lostpointercapture', end);
+  })();
 
   hotbarEl.addEventListener('pointerup', (e) => {
     if (!touchMode) return;
@@ -1600,6 +1815,7 @@
   /* ================= 开始 / 暂停 ================= */
   function requestLock() {
     if (state.auto || touchMode) return;
+    uiCursor = false;
     try {
       const p = canvas.requestPointerLock();
       if (p && typeof p.catch === 'function') {
@@ -1624,6 +1840,7 @@
   function pauseGame() {
     if (state.mode !== 'playing') return;
     state.mode = 'paused';
+    uiCursor = false;
     state.mouseDown[0] = state.mouseDown[1] = false;
     for (const k in keys) keys[k] = false;
     showPause();
@@ -1676,7 +1893,7 @@
     if (!force && !dirtySave && state.time - lastTimeSave < 30) return;
     try {
       const data = world.saveData();
-      data.terrainVersion = 4;
+      data.terrainVersion = 5;
       data.inv = state.bag.map(s => (s ? (s.maxDur ? [s.id, s.count, s.dur, s.maxDur] : [s.id, s.count]) : 0));
       data.hotbar = state.hotbar.map(s => (s ? (s.maxDur ? [s.id, s.count, s.dur, s.maxDur] : [s.id, s.count]) : 0));
       data.time = state.time;
@@ -1862,11 +2079,10 @@
     updateCamera(dt);
     horizon.update(player.pos[0], player.pos[2]);
 
-    const showHit = state.mode === 'playing' || state.mode === 'inventory' || state.mode === 'crafting';
+    const showHit = state.mode === 'playing';
     const blockHit = showHit ? targetInfo() : null;
-    const aimedMob = state.mode === 'playing' ? targetMob(blockHit) : null;
-    const hit = aimedMob ? null : blockHit;
-    crosshair.classList.toggle('mob', !!aimedMob);
+    const hit = blockHit;
+    crosshair.classList.remove('mob');
     const mobBoxes = [];
     mobManager.collect(mobBoxes);
     if (secrets) secrets.collect(mobBoxes);
@@ -1878,6 +2094,7 @@
     updateHeldItem(held, state.mode === 'playing');
     renderer.render(world, cam, drawList(), hit, state.time, mobBoxes,
       state.mode === 'playing' && !held ? hand : null, particles);
+    if (pendingPhoto && state.mode === 'photo') capturePhoto();
 
     updateHud(dt);
     syncTouchUI();
@@ -1921,7 +2138,7 @@
 
   const debugMode = params.has('debug');
   secrets = new MC.Secrets({
-    world, player, state, sfx, particles, mobManager, debug: debugMode,
+    world, player, state, sfx, particles, mobManager, debug: debugMode, scenicOnly: true,
     hooks: {
       toast,
       addItem: (id, count) => addToBag(id, count) === count,

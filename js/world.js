@@ -16,7 +16,7 @@
     return t * t * (3 - 2 * t);
   };
   const nz = (x, z, salt, oct) => (N.fbm2(x, z, salt, oct, 2, 0.5) - 0.5) * 3.6;
-  const TREE_DENSITY = { forest: 0.032, taiga: 0.024, cherry: 0.03, plains: 0.006, snow: 0.014, mountain: 0.001, beach: 0, desert: 0, badlands: 0, ocean: 0 };
+  const TREE_DENSITY = { forest: 0.032, taiga: 0.024, cherry: 0.03, plains: 0.006, snow: 0.014, mountain: 0, beach: 0, desert: 0, badlands: 0, ocean: 0 };
   // Every 3×3 group of regions contains every surface landscape. The low frequency
   // warp and wide blends keep the arrangement from looking like square tiles.
   const REGION_SIZE = 240;
@@ -27,8 +27,9 @@
   ];
   const REGION_HEIGHT = {
     plains: 0, forest: 2, taiga: 4, desert: 0, cherry: 6,
-    mountain: 19, badlands: 9, snow: 3, ocean: -19
+    mountain: 8, badlands: 9, snow: 3, ocean: -19
   };
+  const PEAK_LINKS = [[1, 0, 56, 90], [0, 2, 58, 92], [2, 3, 43, 78]];
   const BIOME_NAMES = {
     ocean: '海洋', frozen_ocean: '冻洋', beach: '沙滩', desert: '沙漠', plains: '平原',
     forest: '森林', taiga: '针叶林', snow: '雪原', mountain: '山地', cherry: '樱花林', badlands: '恶地',
@@ -79,54 +80,24 @@
       this.lightSources = new Map(); // 已加载火把；光照不写入存档
       this.edits = new Map();       // "x,y,z" -> [x,y,z,id]
       this.editIndex = new Map();   // "cx,cz" -> Map<区块内索引, id>
+      // 四条相连的山脊环抱冰川谷。种子只轻微偏移整组山，不会把谷地撕开。
+      const offsetX = Math.round((N.hash2(1, 0, this.seed + 19001) - 0.5) * 34);
+      const offsetZ = Math.round((N.hash2(2, 0, this.seed + 19001) - 0.5) * 34);
       this.peaks = [
-        [212 + (N.hash2(1, 0, this.seed + 19001) - 0.5) * 24,
-          210 + (N.hash2(2, 0, this.seed + 19001) - 0.5) * 24, 123, 104, 55],
-        [326 + (N.hash2(3, 0, this.seed + 19001) - 0.5) * 24,
-          318 + (N.hash2(4, 0, this.seed + 19001) - 0.5) * 24, 112, 98, 52]
+        [310 + offsetX, 370 + offsetZ, 215, 195, 94],
+        [105 + offsetX, 300 + offsetZ, 185, 205, 67],
+        [470 + offsetX, 305 + offsetZ, 185, 190, 68],
+        [520 + offsetX, 165 + offsetZ, 150, 170, 49]
       ];
-      this.valley = {
-        x: Math.round(this.peaks[0][0] - 63), z: Math.round(this.peaks[0][1] - 56),
-        rx: 68, rz: 52
-      };
-      const v = this.valley;
-      this.camp = { x: v.x - 67, z: v.z - 19, y: 0 };
-      let campY = 0;
-      for (let dz = -6; dz <= 6; dz += 3) for (let dx = -7; dx <= 7; dx += 3)
-        campY = Math.max(campY, this.heightAt(this.camp.x + dx, this.camp.z + dz));
-      this.camp.y = Math.max(SEA + 3, campY + 1);
-      this.trails = this.peaks.map((peak, index) => this.makePeakTrail(peak, index));
-      this.trailIndex = new Map();
-      for (const trail of this.trails) {
-        for (const point of trail) {
-          for (let dz = -1; dz <= 1; dz++) for (let dx = -1; dx <= 1; dx++) {
-            const x = point.x + dx, z = point.z + dz;
-            const key = (x >> 4) + ',' + (z >> 4);
-            let cells = this.trailIndex.get(key);
-            if (!cells) { cells = new Map(); this.trailIndex.set(key, cells); }
-            const cellKey = x + ',' + z;
-            const old = cells.get(cellKey);
-            const priority = dx === 0 && dz === 0 ? 2 : 1;
-            if (!old || priority > old.priority || (priority === old.priority && point.y > old.y))
-              cells.set(cellKey, { x, y: point.y, z, priority });
-          }
-        }
-      }
-      // 前哨站位于两座雪山之间的山肩，屋顶高度按当地地势确定。
-      const outpostX = Math.round(this.peaks[0][0] + 105);
-      const outpostZ = Math.round(this.peaks[0][1] - 8);
+      this.glacier = { x: 280 + offsetX, z: 245 + offsetZ, rx: 150, rz: 145 };
+      const v = this.glacier;
+      // 岩石前哨仍作为雪谷中的唯一建筑，位置落在谷内较高的山肩。
+      const outpostX = v.x + 26;
+      const outpostZ = v.z + 28;
       let outpostY = 0;
       for (let dz = -20; dz <= 22; dz += 4) for (let dx = -31; dx <= 29; dx += 4)
         outpostY = Math.max(outpostY, this.heightAt(outpostX + dx, outpostZ + dz));
-      this.outpost = { x: outpostX, z: outpostZ, y: Math.min(116, outpostY + 1) };
-      this.arch = { x: v.x + 78, z: v.z - 12 };
-      this.arch.y = this.heightAt(this.arch.x, this.arch.z) + 1;
-      this.beaconLights = [
-        [this.camp.x - 3, this.camp.y + 1, this.camp.z - 3],
-        [this.camp.x + 3, this.camp.y + 1, this.camp.z + 3],
-        [this.arch.x - 4, this.arch.y + 1, this.arch.z],
-        [this.arch.x + 4, this.arch.y + 1, this.arch.z]
-      ];
+      this.outpost = { x: outpostX, z: outpostZ, y: Math.min(112, outpostY + 1) };
       if (savedEdits && savedEdits.length) {
         for (let i = 0; i < savedEdits.length; i++) {
           const e = savedEdits[i];
@@ -169,11 +140,6 @@
           const y = Math.floor(i / 256), z = (i >> 4) & 15, x = i & 15;
           const wx = cx * 16 + x, wz = cz * 16 + z;
           this.lightSources.set(wx + ',' + y + ',' + wz, [wx, y, wz]);
-        }
-        for (const source of this.beaconLights) {
-          if ((source[0] >> 4) !== cx || (source[2] >> 4) !== cz) continue;
-          if (c.get(source[0] & 15, source[1], source[2] & 15) === B.TORCH)
-            this.lightSources.set(source.join(','), source);
         }
         for (const source of this.lightSources.values()) {
           if (source[0] >= cx * 16 - 14 && source[0] < cx * 16 + 30 &&
@@ -366,88 +332,67 @@
       const edgeZ = (N.noise2(x * 0.034, z * 0.034, s + 7703) - 0.5) * 0.24;
       let biome = this.regionBiome(ix + (gx - ix > 0.5 + edgeX ? 1 : 0),
         iz + (gz - iz > 0.5 + edgeZ ? 1 : 0));
-      if (this.valley) {
-        const v = this.valley;
-        const radius = Math.hypot((x - v.x) / (v.rx * 1.7), (z - v.z) / (v.rz * 1.7));
-        if (radius < 1) {
-          const blend = 1 - smoothstep(0.65, 1, radius);
-          height = height * (1 - blend) + 2 * blend;
-          badlands *= 1 - blend; dry *= 1 - blend; snow *= 1 - blend;
-          mountain *= 1 - blend;
-          if (radius < 0.82) biome = 'plains';
-        }
-      }
       return { biome, height, mountain, badlands, dry, snow };
     }
 
     peakRise(x, z) {
-      // Two fixed, seed-shifted summits in the first mountain region. Each bump
-      // reaches zero with a flat derivative, so it joins the surrounding hills.
+      // Sharp summits and branching ribs, with a wide footprint for a full massif.
+      const v = this.glacier;
+      if (v && (x < v.x - 430 || x > v.x + 455 || z < v.z - 270 || z > v.z + 435)) return 0;
       let rise = 0;
       for (let i = 0; i < this.peaks.length; i++) {
         const p = this.peaks[i], dx = (x - p[0]) / p[2], dz = (z - p[1]) / p[3];
-        const q = dx * dx + dz * dz;
-        if (q < 1) {
-          const radius = Math.sqrt(q);
-          const taper = 1 - radius;
-          const spine = Math.max(0, Math.cos(Math.atan2(dz, dx) * 7 + i * 1.4));
-          rise += p[4] * Math.pow(taper, 1.24) +
-            12 * spine * spine * spine * radius * taper;
-        }
+        const rawRadius = Math.hypot(dx, dz);
+        if (rawRadius >= 1.34) continue;
+        const angle = Math.atan2(dz, dx);
+        const folds = 1 + Math.sin(angle * (5 + i % 3) + i * 1.7) * 0.18 +
+          Math.sin(angle * (11 + i % 2) - i * 0.9) * 0.07;
+        const radius = rawRadius * folds;
+        if (radius >= 1) continue;
+        const taper = 1 - radius;
+        const ribs = Math.pow(Math.max(0, Math.cos(angle * (5 + i % 3) + i * 1.7)), 4);
+        const irregular = (N.noise2(x * 0.014, z * 0.014, this.seed + 21341 + i * 197) - 0.5) * 9;
+        const summit = p[4] * Math.pow(taper, 1.04) + ribs * radius * taper * 28 + irregular * taper;
+        rise = Math.max(rise, summit);
+      }
+      // Saddles connect the summits into one horizon-wide mountain chain.
+      for (const [from, to, height, width] of PEAK_LINKS) {
+        const a = this.peaks[from], b = this.peaks[to];
+        const vx = b[0] - a[0], vz = b[1] - a[1];
+        const t = Math.max(0, Math.min(1, ((x - a[0]) * vx + (z - a[1]) * vz) / (vx * vx + vz * vz)));
+        if (t <= 0 || t >= 1) continue;
+        const distance = Math.hypot(x - a[0] - vx * t, z - a[1] - vz * t);
+        if (distance >= width) continue;
+        const saddle = height * Math.pow(1 - distance / width, 1.12) * Math.pow(Math.sin(Math.PI * t), 0.72);
+        rise = Math.max(rise, saddle);
       }
       return rise;
     }
 
-    makePeakTrail(peak, index) {
-      const cx = Math.round(peak[0]), cz = Math.round(peak[1]);
-      const other = this.peaks[1 - index];
-      const radius = Math.min(108, Math.floor(Math.hypot(cx - other[0], cz - other[1]) / 2) - 5);
-      const outerRadius = radius + 38;
-      const toOther = Math.atan2(other[1] - cz, other[0] - cx);
-      let startAngle = 0, startHeight = Infinity;
-      for (let i = 0; i < 32; i++) {
-        const angle = i * Math.PI / 16;
-        if (Math.cos(angle - toOther) > -0.25) continue;
-        const x = Math.round(cx + Math.cos(angle) * outerRadius);
-        const z = Math.round(cz + Math.sin(angle) * outerRadius);
-        const h = this.heightAt(x, z);
-        if (h > SEA + 3 && h < startHeight) { startHeight = h; startAngle = angle; }
-      }
-      if (!Number.isFinite(startHeight)) {
-        startAngle = toOther + Math.PI;
-        startHeight = this.heightAt(Math.round(cx + Math.cos(startAngle) * outerRadius),
-          Math.round(cz + Math.sin(startAngle) * outerRadius));
-      }
-      const top = this.heightAt(cx, cz);
-      const points = [];
-      for (let r = outerRadius; r > radius; r--) {
-        const x = Math.round(cx + Math.cos(startAngle) * r);
-        const z = Math.round(cz + Math.sin(startAngle) * r);
-        if (points.length && points[points.length - 1].x === x && points[points.length - 1].z === z) continue;
-        points.push({ x, z, y: this.heightAt(x, z) });
-      }
-      const steps = 2400;
-      for (let i = 0; i <= steps; i++) {
-        const t = i / steps;
-        const r = radius - t * (radius - 7);
-        const angle = startAngle + (index ? -1 : 1) * t * Math.PI * 4.5;
-        const x = Math.round(cx + Math.cos(angle) * r);
-        const z = Math.round(cz + Math.sin(angle) * r);
-        if (points.length && points[points.length - 1].x === x && points[points.length - 1].z === z) continue;
-        const ground = this.heightAt(x, z);
-        points.push({ x, z, y: Math.max(ground, Math.round(startHeight + (top - startHeight) * t)) });
-      }
-      const lastAngle = startAngle + (index ? -1 : 1) * Math.PI * 4.5;
-      for (let r = 6; r >= 0; r--) {
-        const x = Math.round(cx + Math.cos(lastAngle) * r), z = Math.round(cz + Math.sin(lastAngle) * r);
-        if (points.length && points[points.length - 1].x === x && points[points.length - 1].z === z) continue;
-        points.push({ x, z, y: Math.max(this.heightAt(x, z), top - r) });
-      }
-      // The upper envelope makes every adjacent step climbable, even where the
-      // generated ridge cuts abruptly across the planned spiral.
-      for (let i = 1; i < points.length; i++) points[i].y = Math.max(points[i].y, points[i - 1].y - 1);
-      for (let i = points.length - 2; i >= 0; i--) points[i].y = Math.max(points[i].y, points[i + 1].y - 1);
-      return points;
+    glacierAxis(z) {
+      const v = this.glacier;
+      return v.x + Math.sin((z - v.z) * 0.011) * 24 +
+        (N.noise2(z * 0.008, 7.3, this.seed + 22217) - 0.5) * 28;
+    }
+
+    glacierWidth(z) {
+      return this.glacier.rx * (0.80 +
+        N.noise2(z * 0.011, 5.7, this.seed + 22253) * 0.29);
+    }
+
+    glacierWeight(x, z) {
+      const v = this.glacier;
+      if (!v) return 0;
+      if (z < v.z - 270 || z > v.z + 195 || Math.abs(x - v.x) > v.rx * 1.65) return 0;
+      // The glacier is an open, winding valley, not a circular basin.
+      const axis = this.glacierAxis(z);
+      const warp = (N.noise2(x * 0.009, z * 0.009, this.seed + 22517) - 0.5) * 0.19;
+      const lateral = Math.abs(x - axis) / this.glacierWidth(z) + warp;
+      const sides = 1 - smoothstep(0.55, 1.18, lateral);
+      const endWarp = (N.noise2(x * 0.009, z * 0.009, this.seed + 22319) - 0.5) * 32;
+      const front = smoothstep(v.z - 245, v.z - 153, z + endWarp);
+      const back = 1 - smoothstep(v.z + 45, v.z + 120, z + endWarp);
+      return sides * front * back;
     }
 
     heightAt(x, z, field) {
@@ -457,32 +402,34 @@
       h += nz(x * 0.0027, z * 0.0027, s + 101, 3) * 5;
       h += nz(x * 0.012, z * 0.012, s + 211, 3) * (3.5 + field.mountain * 6);
       h += nz(x * 0.045, z * 0.045, s + 503, 2) * 1.4;
-      // Jagged highlands, layered mesas, and winding water-level rivers.
-      const ridge = Math.abs(nz(x * 0.006, z * 0.006, s + 337, 3));
-      h += field.mountain * (9 + ridge * 11);
+      // Every mountain region uses ridged terrain; the first massif adds broad
+      // named summits that remain visible from the glacier floor.
+      const ridge = 1 - Math.abs(N.fbm2(x * 0.006, z * 0.006, s + 337, 3) * 2 - 1);
+      const highland = field.mountain * (20 + 52 * Math.pow(ridge, 2.2));
       const summit = this.peakRise(x, z);
-      h += summit;
-      // Keep both summits prominent even if their seed lands on a low ridge.
-      if (summit > 18) {
-        const target = 78 + summit * 0.65;
-        h += smoothstep(18, 45, summit) * Math.max(0, target - h);
-      }
+      h += Math.max(highland, summit);
       h += field.badlands * Math.floor(N.noise2(x * 0.009, z * 0.009, s + 404) * 4) * 2;
       const river = Math.abs(nz(x * 0.0028, z * 0.0028, s + 1511, 3));
-      const cut = smoothstep(0.13, 0.025, river) * (1 - field.mountain * 0.7) *
+      const cut = smoothstep(0.13, 0.025, river) * (1 - field.mountain * 0.9) *
         (1 - smoothstep(3, 24, summit));
       h -= cut * Math.max(0, h - SEA + 1);
-      if (this.valley) {
-        const v = this.valley;
-        const radius = Math.hypot((x - v.x) / v.rx, (z - v.z) / v.rz) +
-          (N.noise2(x * 0.042, z * 0.042, s + 5221) - 0.5) * 0.07;
-        if (radius < 1.8) {
-          const basin = 25 + 20 * smoothstep(0.28, 1.55, radius) +
-            (N.noise2(x * 0.075, z * 0.075, s + 5213) - 0.5) * 2.5;
-          const blend = 1 - smoothstep(1.15, 1.8, radius);
-          h = h * (1 - blend) + basin * blend;
+      if (this.glacier) {
+        const v = this.glacier;
+        if (z > v.z - 245 && z < v.z + 145 && Math.abs(x - v.x) < v.rx * 1.5) {
+          const axis = this.glacierAxis(z);
+          const lateral = Math.abs(x - axis) / this.glacierWidth(z);
+          const floor = 59 + 8 * smoothstep(0.18, 1.1, lateral) +
+            (z - v.z) * 0.018 +
+            (N.noise2(x * 0.025, z * 0.025, s + 5213) - 0.5) * 3;
+          const blend = this.glacierWeight(x, z);
+          h -= Math.max(0, h - floor) * blend;
+          // A small rocky knoll carries the outpost above the snowfield.
+          const island = Math.hypot((x - v.x - 26) / 39, (z - v.z - 28) / 31);
+          h += 10 * (1 - smoothstep(0.25, 1.25, island)) * blend;
         }
       }
+      // Compress only the very tallest tips so no seed produces a flat 136-block roof.
+      if (h > 129) h = 129 + 7 * (1 - Math.exp(-(h - 129) / 7));
       return Math.max(5, Math.min(MAX_TERRAIN, Math.round(h)));
     }
 
@@ -550,35 +497,27 @@
             h <= SEA_ + 2 ? 'beach' : h > 64 ? 'mountain' : field.biome;
           const cherry = biome === 'cherry';
           const cold = field.biome === 'snow';
-          const snowline = 79 + (N.noise2(wx * 0.038, wz * 0.038, this.seed + 3503) - 0.5) * 10;
-          const redlands = field.badlands > 0.40 + N.noise2(wx * 0.052, wz * 0.052, this.seed + 3703) * 0.30;
-          const sandy = field.dry > 0.25 + N.noise2(wx * 0.052, wz * 0.052, this.seed + 3903) * 0.50;
-          const snowy = h >= snowline || (!redlands && field.snow >
-            0.28 + N.noise2(wx * 0.052, wz * 0.052, this.seed + 4103) * 0.45);
-          const rocky = slope >= 4 || h >= 64;
           const peakStrength = this.peakRise(wx, wz);
-          const alpine = h > 74 && (field.mountain > 0.42 || peakStrength > 6);
-          let rockRib = false, icefall = false;
-          if (peakStrength > 10 && h > 78) {
-            const p0 = this.peaks[0], p1 = this.peaks[1];
-            const d0 = (wx - p0[0]) ** 2 + (wz - p0[1]) ** 2;
-            const d1 = (wx - p1[0]) ** 2 + (wz - p1[1]) ** 2;
-            const peak = d0 < d1 ? p0 : p1;
-            const angle = Math.atan2(wz - peak[1], wx - peak[0]);
-            const warp = (N.noise2(wx * 0.025, wz * 0.025, this.seed + 28111) - 0.5) * 1.3;
-            rockRib = slope >= 1 && Math.sin(angle * 7 + warp) > 0.78;
-            icefall = h > 89 && peakStrength > 22 &&
-              Math.sin(angle * 4 + warp * 0.45 + 1.7) > 0.965;
-          }
-          const rockPatch = alpine && snowy && slope >= 1 &&
-            N.noise2(wx * 0.021, wz * 0.021, this.seed + 28013) +
-            N.noise2(wx * 0.092, wz * 0.092, this.seed + 28031) * 0.24 >
-            (peakStrength > 10 ? 0.72 : 0.95) || rockRib;
-          const icePatch = icefall || (rockPatch &&
-            N.hash2(Math.floor(wx / 7), Math.floor(wz / 7), this.seed + 28049) > 0.9);
+          const glacier = this.glacierWeight(wx, wz);
+          const protectedAlpine = glacier > 0.12 || peakStrength > 9;
+          const redlands = !protectedAlpine && field.badlands >
+            0.40 + N.noise2(wx * 0.052, wz * 0.052, this.seed + 3703) * 0.30;
+          const sandy = !protectedAlpine && field.dry >
+            0.25 + N.noise2(wx * 0.052, wz * 0.052, this.seed + 3903) * 0.50;
+          const alpine = field.mountain > 0.18 || peakStrength > 9 || glacier > 0.12;
+          const snowline = 73 - glacier * 23 - field.mountain * 7 +
+            (N.noise2(wx * 0.028, wz * 0.028, this.seed + 3503) - 0.5) * 10;
+          const snowy = !redlands && ((alpine && h >= snowline) || field.snow >
+            0.28 + N.noise2(wx * 0.052, wz * 0.052, this.seed + 4103) * 0.45);
+          const rockNoise = N.noise2(wx * 0.024, wz * 0.024, this.seed + 28013) * 0.34 +
+            (N.noise2(wx * 0.083, wz * 0.083, this.seed + 28031) - 0.5) * 0.10;
+          const exposure = smoothstep(75, 112, h) * 0.35 +
+            smoothstep(1, 4, slope) * 0.18 + rockNoise - glacier * 0.42;
+          const rockPatch = snowy && alpine && h > 75 && exposure > 0.47;
+          const rocky = slope >= 4 || h >= 64;
           const mossy = (biome === 'forest' || biome === 'taiga') &&
             N.noise2(wx * 0.042, wz * 0.042, this.seed + 2277) > 0.66;
-          const surface = snowy ? (icePatch ? B.ICE : rockPatch ? B.STONE : B.SNOW) :
+          const surface = snowy ? (rockPatch ? B.STONE : B.SNOW) :
             (redlands ? B.RED_SAND : (beach || sandy ? B.SAND : ((rocky && !cherry) ? B.STONE : (mossy ? B.MOSS : B.GRASS))));
           const under = redlands ? B.TERRACOTTA : (beach || sandy ? B.SAND : (rocky ? B.STONE : B.DIRT));
           const caveCeiling = Math.min(h - 2, 72);
@@ -588,8 +527,7 @@
               id = B.BEDROCK;
             } else if (y <= h) {
               if (y === h) id = surface;
-              else if (icePatch && y >= h - 2) id = B.ICE;
-              else if (snowy && !rockPatch && y >= h - 2) id = B.SNOW;
+              else if (snowy && !rockPatch && y >= h - 3) id = B.SNOW;
               else if (redlands && y > h - 18) id = this.badlandsLayer(y);
               else if (y > h - 4) id = under;
               else id = B.STONE;
@@ -608,11 +546,8 @@
       this.decorateCaves(chunk);
       this.placeTrees(chunk);
       this.placeBoulders(chunk);
-      this.placeAlpineDetails(chunk);
       this.placePetals(chunk);
       this.placeAlpineOutpost(chunk);
-      this.placeFrontierLandmarks(chunk);
-      this.placePeakTrail(chunk);
       this.placeOpenWorld(chunk);
       this.applyEdits(chunk);
       chunk.generated = true;
@@ -652,23 +587,6 @@
       const i = (y * CHUNK + lz) * CHUNK + lx;
       if (onlyAir && chunk.blocks[i] !== 0) return;
       chunk.blocks[i] = id;
-    }
-
-    placePeakTrail(chunk) {
-      const cells = this.trailIndex.get(this.chunkKey(chunk.cx, chunk.cz));
-      if (!cells) return;
-      // Clear the whole corridor first, then put every tread back. This keeps
-      // uphill steps from erasing a lower tread in the same three-wide path.
-      for (const { x, y, z } of cells.values()) {
-        for (let dy = 1; dy <= 3; dy++) this.put(chunk, x, y + dy, z, B.AIR);
-      }
-      for (const { x, y, z } of cells.values()) {
-        const ground = this.heightAt(x, z);
-        if (ground < y - 1) {
-          for (let sy = ground + 1; sy < y; sy++) this.put(chunk, x, sy, z, B.COBBLE);
-        }
-        this.put(chunk, x, y, z, y >= 80 ? B.SNOW : B.COBBLE);
-      }
     }
 
     placeAlpineOutpost(chunk) {
@@ -733,64 +651,6 @@
         const stepY = Math.max(ground + 1, base - (dz - 8));
         for (let y = ground + 1; y <= stepY; y++) this.put(chunk, x, y, z, B.COBBLE);
         for (let dy = 1; dy <= 3; dy++) this.put(chunk, x, stepY + dy, z, B.AIR);
-      }
-    }
-
-    placeFrontierLandmarks(chunk) {
-      const bx = chunk.cx * CHUNK, bz = chunk.cz * CHUNK;
-      const c = this.camp;
-      if (bx <= c.x + 36 && bx + 15 >= c.x - 8 &&
-          bz <= c.z + 8 && bz + 15 >= c.z - 8) {
-        for (let z = Math.max(bz, c.z - 6); z <= Math.min(bz + 15, c.z + 6); z++)
-          for (let x = Math.max(bx, c.x - 7); x <= Math.min(bx + 15, c.x + 7); x++) {
-            const dx = x - c.x, dz = z - c.z;
-            const inside = Math.abs(dx) <= 5 && Math.abs(dz) <= 4;
-            if (inside) {
-              const ground = this.heightAt(x, z);
-              for (let y = ground + 1; y <= c.y; y++) this.put(chunk, x, y, z, B.COBBLE);
-              this.put(chunk, x, c.y, z, B.PLANKS);
-              for (let dy = 1; dy <= 5; dy++) this.put(chunk, x, c.y + dy, z, B.AIR);
-              if (Math.abs(dx) === 5 && Math.abs(dz) === 4)
-                for (let dy = 1; dy <= 4; dy++) this.put(chunk, x, c.y + dy, z, B.SPRUCE_LOG);
-              if (Math.abs(dx) <= 5 && Math.abs(dz) <= 4)
-                this.put(chunk, x, c.y + 5 + (Math.abs(dz) < 3 ? 1 : 0), z, B.SPRUCE_LEAVES);
-            }
-            if (Math.abs(dx) === 7 && Math.abs(dz) <= 5)
-              this.put(chunk, x, this.heightAt(x, z) + 1, z, B.COBBLE);
-          }
-        // 从营地向湖面伸出的木栈道。
-        for (let x = Math.max(bx, c.x + 6); x <= Math.min(bx + 15, c.x + 36); x++)
-          for (let z = Math.max(bz, c.z - 1); z <= Math.min(bz + 15, c.z + 1); z++) {
-            const ground = this.heightAt(x, z);
-            const floor = Math.max(SEA + 2, c.y - Math.floor((x - c.x) / 13));
-            if ((x - c.x) % 8 === 0)
-              for (let y = ground + 1; y < floor; y++) this.put(chunk, x, y, z, B.SPRUCE_LOG);
-            this.put(chunk, x, floor, z, B.PLANKS);
-            for (let dy = 1; dy <= 3; dy++) this.put(chunk, x, floor + dy, z, B.AIR);
-          }
-        this.put(chunk, c.x - 2, c.y + 1, c.z, B.TABLE);
-        this.put(chunk, c.x + 3, c.y + 1, c.z - 2, B.COBBLE);
-        this.put(chunk, c.x - 3, c.y + 1, c.z - 3, B.TORCH);
-        this.put(chunk, c.x + 3, c.y + 1, c.z + 3, B.TORCH);
-      }
-      const a = this.arch;
-      if (bx <= a.x + 5 && bx + 15 >= a.x - 5 &&
-          bz <= a.z + 3 && bz + 15 >= a.z - 3) {
-        for (let dx = -4; dx <= 4; dx++) for (let dz = -2; dz <= 2; dz++) {
-          const x = a.x + dx, z = a.z + dz;
-          this.put(chunk, x, a.y - 1, z, B.COBBLE);
-          for (let dy = 0; dy <= 7; dy++) {
-            const column = Math.abs(dx) >= 3 && Math.abs(dz) >= 1;
-            const lintel = dy >= 6 && Math.abs(dz) >= 1;
-            if (column || lintel) this.put(chunk, x, a.y + dy, z,
-              dy === 7 ? B.SNOW : (dy % 3 === 0 ? B.STONE : B.COBBLE));
-            else if (dy <= 5) this.put(chunk, x, a.y + dy, z, B.AIR);
-          }
-        }
-        for (const dx of [-4, 4]) {
-          this.put(chunk, a.x + dx, a.y, a.z, B.COBBLE);
-          this.put(chunk, a.x + dx, a.y + 1, a.z, B.TORCH);
-        }
       }
     }
 
@@ -885,49 +745,6 @@
           if (Math.abs(ground - h) > 2) continue;
           const top = dx === 0 && dz === 0 ? 2 : 1;
           for (let dy = 1; dy <= top; dy++) this.put(chunk, wx + dx, ground + dy, wz + dz, B.COBBLE, true);
-        }
-      }
-    }
-
-    nearPeakTrail(wx, wz, radius) {
-      for (let dz = -radius; dz <= radius; dz++) for (let dx = -radius; dx <= radius; dx++) {
-        const x = wx + dx, z = wz + dz;
-        const cells = this.trailIndex.get(this.chunkKey(x >> 4, z >> 4));
-        if (cells && cells.has(x + ',' + z)) return true;
-      }
-      return false;
-    }
-
-    placeAlpineDetails(chunk) {
-      const bx = chunk.cx * CHUNK, bz = chunk.cz * CHUNK;
-      for (let z = -4; z < CHUNK + 4; z++) for (let x = -4; x < CHUNK + 4; x++) {
-        const wx = bx + x, wz = bz + z;
-        const treeRoll = N.randomAt(wx, wz, this.seed + 28129);
-        const cragRoll = N.randomAt(wx, wz, this.seed + 28147);
-        if (treeRoll >= 0.018 && cragRoll >= 0.006) continue;
-        const peak = this.peakRise(wx, wz);
-        if (peak < 5) continue;
-        const h = this.heightAt(wx, wz);
-        const tree = h >= 64 && h <= 95 && treeRoll < 0.018;
-        const crag = h >= 83 && h <= 113 && peak > 12 && cragRoll < 0.006;
-        if (!tree && !crag) continue;
-        if (this.nearPeakTrail(wx, wz, tree ? 4 : 3)) continue;
-        const slope = Math.max(
-          Math.abs(this.heightAt(wx + 2, wz) - h), Math.abs(this.heightAt(wx - 2, wz) - h),
-          Math.abs(this.heightAt(wx, wz + 2) - h), Math.abs(this.heightAt(wx, wz - 2) - h));
-        if (tree && slope <= 3) {
-          this.placeTree(chunk, wx, h, wz, 'spruce', this.seed);
-          continue;
-        }
-        if (!crag || slope > 5) continue;
-        const ice = N.randomAt(wx, wz, this.seed + 28153) > 0.7;
-        const height = 2 + ((N.randomAt(wx, wz, this.seed + 28159) * 3) | 0);
-        for (let dy = 1; dy <= height; dy++) {
-          this.put(chunk, wx, h + dy, wz, ice ? B.ICE : B.STONE, true);
-          if (dy <= 2) {
-            this.put(chunk, wx + 1, h + dy, wz, ice ? B.ICE : B.COBBLE, true);
-            this.put(chunk, wx, h + dy, wz + 1, ice ? B.ICE : B.COBBLE, true);
-          }
         }
       }
     }
@@ -1120,7 +937,7 @@
       this.addSite({ type: 'origin', x: 0, z: 0,
         y: Math.max(this.maxHeight(0, 0, 4) + 1, SEA + 2) });
 
-      // 两座雪山：一把拔不出的剑，和一堆指向北方的石头。
+      // 新群峰的两处峰顶仍留有石中剑与旧石堆。
       const p0 = this.peaks[0], p1 = this.peaks[1];
       this.addSite({ type: 'sword', x: Math.round(p0[0]), z: Math.round(p0[1]),
         y: this.heightAt(Math.round(p0[0]), Math.round(p0[1])) + 1 });
@@ -1577,12 +1394,13 @@
     }
 
     findSpawn() {
-      if (this.valley) {
-        const v = this.valley;
-        const x = Math.round(v.x - v.rx * 1.15), z = Math.round(v.z + v.rz * 0.21);
-        const dx = v.x + 40 - x, dz = v.z + 25 - z;
+      if (this.glacier) {
+        const v = this.glacier;
+        // 从冰川谷入口看向群峰；不要把玩家放在旧湖边。
+        const x = Math.round(v.x - v.rx * 0.58), z = Math.round(v.z - v.rz * 0.63);
+        const dx = v.x + 20 - x, dz = v.z + 130 - z;
         return { x: x + 0.5, y: this.heightAt(x, z) + 1.2, z: z + 0.5,
-          yaw: Math.atan2(-dx, -dz), pitch: -0.055 };
+          yaw: Math.atan2(-dx, -dz), pitch: -0.09 };
       }
       // 挑一个「靠海 + 有起伏」的出生点，第一眼就有风景
       let best = null, bestScore = -1e9;

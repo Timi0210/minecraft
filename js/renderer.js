@@ -252,7 +252,7 @@ float shadowAt(vec3 wp, vec3 n) {
 
 vec3 farTexture(float tile, vec2 p) {
   vec2 origin = vec2(mod(tile, uAtlasGrid), floor(tile / uAtlasGrid));
-  return texture(uTex, (origin + 0.03125 + fract(p * 0.125) * 0.9375) / uAtlasGrid).rgb;
+  return texture(uTex, (origin + 0.015625 + fract(p * 0.125) * 0.96875) / uAtlasGrid).rgb;
 }
 
 void main() {
@@ -334,11 +334,11 @@ float vnoise(vec2 p) {
   return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
 }
 float cloudMask(vec2 worldXZ) {
-  // One value per square cell keeps every outline aligned to the world grid.
-  vec2 cell = floor(worldXZ / 3.5);
-  float mass = vnoise(cell * vec2(0.115, 0.245) + 3.7);
-  float detail = vnoise(cell * vec2(0.32, 0.49) + 19.3);
-  return step(0.535, mass * 0.68 + detail * 0.32);
+  vec2 p = worldXZ * 0.038;
+  float mass = vnoise(p * 0.75 + 3.7);
+  float detail = vnoise(p * 2.1 + 19.3);
+  float wisps = vnoise(p * 4.6 + 41.8);
+  return smoothstep(0.49, 0.60, mass * 0.73 + detail * 0.23 + wisps * 0.04);
 }
 void main() {
   vec3 dir = normalize(vDir);
@@ -602,8 +602,8 @@ void main() { fragColor = vColor; }`;
       gl.bindTexture(gl.TEXTURE_2D, tex);
       gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
       gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, MC.Atlas.canvas);
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
       return tex;
@@ -819,17 +819,17 @@ void main() { fragColor = vColor; }`;
         const cx = peak[0], cz = peak[1];
         const summit = world.heightAt(Math.round(cx), Math.round(cz));
         const baseRadius = Math.min(peak[2], peak[3]);
-        for (let ring = 0; ring < 2; ring++) {
-          const count = ring ? 17 : 11;
+        for (let ring = 0; ring < 1; ring++) {
+          const count = 8;
           for (let j = 0; j < count; j++) {
             const key = peakIndex * 100 + ring * 37 + j;
             if (rand(key + 13) < (ring ? 0.20 : 0.10)) continue;
             const angle = (j + ring * 0.31) * Math.PI * 2 / count +
               (rand(key + 29) - 0.5) * 0.27;
-            const r = baseRadius * (ring ? 0.80 : 0.60) + (rand(key + 43) - 0.5) * 13;
+            const r = baseRadius * 0.72 + (rand(key + 43) - 0.5) * 13;
             const x = cx + Math.cos(angle) * r;
             const z = cz + Math.sin(angle) * r;
-            const halfWidth = 17 + rand(key + 59) * 18;
+            const halfWidth = 12 + rand(key + 59) * 13;
             const wisp = rand(key + 73) < 0.22;
             const halfHeight = (7 + rand(key + 83) * 7) * (wisp ? 0.60 : 1);
             const ground = world.heightAt(Math.round(x), Math.round(z));
@@ -837,15 +837,9 @@ void main() { fragColor = vColor; }`;
               ground + halfHeight * 0.68);
             layout.push({ x, y, z, peakX: cx, peakZ: cz, vertical: true,
               radius: halfWidth * (wisp ? 1.3 : 1), halfHeight,
-              strength: (0.32 + rand(key + 109) * 0.18) * (wisp ? 0.72 : 1),
+              strength: (0.16 + rand(key + 109) * 0.12) * (wisp ? 0.72 : 1),
               phase: rand(key + 127) * Math.PI * 2 });
           }
-        }
-        for (let i = 0; i < 2; i++) {
-          const y = summit - (i ? 43 : 55);
-          layout.push({ x: cx, y, z: cz, peakX: cx, peakZ: cz, vertical: false,
-            radius: baseRadius * (i ? 0.74 : 0.95), halfHeight: y,
-            strength: i ? 0.08 : 0.10, phase: i });
         }
       }
       return layout;

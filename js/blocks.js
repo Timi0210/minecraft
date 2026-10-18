@@ -1,12 +1,13 @@
-/* blocks.js — 16×16 原版风格像素纹理图集 + 方块定义 + 等距图标 + 生物贴图 */
+/* blocks.js — 64×64 程序化材质图集 + 方块定义 + 等距图标 + 生物贴图 */
 (function () {
   'use strict';
   const MC = (window.MC = window.MC || {});
   const N = MC.Noise;
 
-  const TS = 16;          // 单块纹理像素（原版尺寸）
-  const GRID = 16;        // 图集 16x16
-  const SIZE = TS * GRID; // 256
+  const TS = 16;             // 旧画稿坐标；保留现有图案的形状
+  const ATLAS_TS = 64;       // 实际渲染的每面纹理精度
+  const GRID = 16;
+  const SIZE = ATLAS_TS * GRID;
 
   const painters = {};
   const order = [];
@@ -61,7 +62,7 @@
   const P = {
     grass: [[104, 155, 78], [91, 139, 67], [121, 169, 89], [78, 124, 61]],
     dirt: [[134, 96, 67], [120, 85, 58], [150, 110, 78], [107, 75, 51]],
-    stone: [[125, 125, 125], [112, 112, 112], [138, 138, 138], [99, 99, 99]],
+    stone: [[137, 138, 137], [124, 126, 127], [150, 151, 148], [113, 115, 116]],
     sand: [[226, 214, 164], [212, 199, 148], [240, 231, 190], [200, 187, 136]],
     snow: [[243, 248, 255], [226, 235, 247], [255, 255, 255], [211, 223, 240]],
     brick: [[160, 82, 60], [143, 70, 50], [176, 96, 70], [128, 60, 43]],
@@ -110,10 +111,10 @@
     fill(d, P.stone[0]);
     specks(d, rng, [P.stone[1], P.stone[3]], 20, 2, 2);
     specks(d, rng, [P.stone[2]], 10, 2, 1);
-    for (let i = 0; i < 3; i++) {
-      const x = 2 + ((rng() * 10) | 0), y = 2 + ((rng() * 10) | 0);
-      set(d, x, y, 105, 105, 105); set(d, x + 1, y, 105, 105, 105);
-      set(d, x, y + 1, 105, 105, 105); set(d, x + 1, y + 1, 105, 105, 105);
+    for (let i = 0; i < 4; i++) {
+      const x = 2 + ((rng() * 11) | 0), y = 2 + ((rng() * 11) | 0);
+      set(d, x, y, 119, 121, 122);
+      set(d, x + 1, y + (rng() < 0.5 ? 0 : 1), 124, 126, 127);
     }
   }
   tile('stone', paintStone);
@@ -701,17 +702,134 @@
   });
 
   /* ---------- 合成图集 ---------- */
+  // 地表与山面选用多张固定变体，避免一整座山出现相同的 16 像素斑点。
+  const variantNames = [
+    'grass_top', 'grass_side', 'dirt', 'stone', 'cobble', 'sand', 'snow',
+    'red_sand', 'terracotta', 'orange_terracotta', 'yellow_terracotta',
+    'white_terracotta', 'moss', 'clay', 'dripstone'
+  ];
+  for (const name of variantNames) {
+    for (let n = 1; n < 4; n++) tile(name + '_variant_' + n, painters[name]);
+  }
+
+  // 在原有色块之上生成真正的 64 像素微纹理，而不是直接放大 16 像素图。
+  // 图案边界仍由旧画稿决定；细纹用稳定的坐标哈希生成，不会随帧闪烁。
+  function hash(x, y, seed) {
+    let h = Math.imul(x + 19, 374761393) ^ Math.imul(y + 47, 668265263) ^ seed;
+    h = Math.imul(h ^ (h >>> 13), 1274126177);
+    return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
+  }
+
+  function refineTile(source, name, seed) {
+    const out = new Uint8ClampedArray(ATLAS_TS * ATLAS_TS * 4);
+    const item = name.startsWith('item_') || name.startsWith('tool_');
+    const foliage = /leaves|grass|moss|petals/.test(name);
+    const mineral = /stone|cobble|ore|clay|dripstone|bedrock|tablet/.test(name);
+    const softRock = /stone|ore|clay|dripstone|bedrock/.test(name) && !/sword/.test(name);
+    const timber = /log|planks|table/.test(name);
+    const fine = /sand|snow|wool/.test(name);
+    const quiet = item || /water|glass|ice|torch|face|leg|hoof|beak|comb|sleeve|shade|banner|glitch/.test(name);
+    const strength = quiet ? 0 : mineral ? 11 : foliage ? 10 : timber ? 8 : fine ? 7 : 6;
+    const pixel = (x, y, c) => source[((Math.max(0, Math.min(15, y)) * TS) + Math.max(0, Math.min(15, x))) * 4 + c];
+
+    for (let y = 0; y < ATLAS_TS; y++) {
+      for (let x = 0; x < ATLAS_TS; x++) {
+        const bx = x >> 2, by = y >> 2;
+        const i = (y * ATLAS_TS + x) * 4;
+        const alpha = pixel(bx, by, 3);
+        if (!alpha) {
+          for (let c = 0; c < 3; c++) out[i + c] = pixel(bx, by, c);
+          continue;
+        }
+        const grain = hash(x, y, seed) - 0.5;
+        const coarse = hash(x >> 1, y >> 1, seed ^ 0x71e1) - 0.5;
+        const hairline = mineral && hash(x >> 2, y >> 2, seed ^ 0x33aa) > 0.90 &&
+          ((x + y * 2 + seed) % 13 === 0) ? -11 : 0;
+        const fiber = timber ? (hash(x >> 3, y, seed ^ 0x8f17) - 0.5) * 5 : 0;
+        const fleck = fine && hash(x, y, seed ^ 0x5a17) > 0.985 ? 10 : 0;
+        const leaf = foliage && hash(x, y, seed ^ 0x7612) > 0.97 ? 12 : 0;
+        const detail = strength * (grain * 0.72 + coarse * 0.8) + hairline + fiber + fleck + leaf;
+        // 岩面用双线性底色代替方形大斑；矿物颗粒仍逐像素独立生成。
+        const blend = quiet || alpha < 100 ? 0 : 0.18;
+        const sx = (x + 0.5) * 0.25 - 0.5, sy = (y + 0.5) * 0.25 - 0.5;
+        const x0 = Math.floor(sx), y0 = Math.floor(sy);
+        const tx = sx - x0, ty = sy - y0;
+        for (let c = 0; c < 3; c++) {
+          const base = pixel(bx, by, c);
+          const neighbor = (pixel(bx + (x % 4 > 1 ? 1 : -1), by, c) +
+            pixel(bx, by + (y % 4 > 1 ? 1 : -1), c)) * 0.5;
+          const smoothBase = softRock ?
+            (pixel(x0, y0, c) * (1 - tx) + pixel(x0 + 1, y0, c) * tx) * (1 - ty) +
+            (pixel(x0, y0 + 1, c) * (1 - tx) + pixel(x0 + 1, y0 + 1, c) * tx) * ty :
+            base * (1 - blend) + neighbor * blend;
+          out[i + c] = clamp(smoothBase + detail);
+        }
+        out[i + 3] = alpha;
+      }
+    }
+    return out;
+  }
+
+  function padTransparentColors(draft) {
+    const original = draft.slice();
+    for (let y = 0; y < TS; y++) for (let x = 0; x < TS; x++) {
+      const i = (y * TS + x) * 4;
+      if (original[i + 3]) continue;
+      let nearest = -1;
+      for (let radius = 1; radius <= 3 && nearest < 0; radius++) {
+        for (let dy = -radius; dy <= radius && nearest < 0; dy++) {
+          for (let dx = -radius; dx <= radius; dx++) {
+            if (Math.max(Math.abs(dx), Math.abs(dy)) !== radius) continue;
+            const xx = x + dx, yy = y + dy;
+            if (xx < 0 || yy < 0 || xx >= TS || yy >= TS) continue;
+            const j = (yy * TS + xx) * 4;
+            if (original[j + 3]) { nearest = j; break; }
+          }
+        }
+      }
+      if (nearest < 0) continue;
+      draft[i] = original[nearest];
+      draft[i + 1] = original[nearest + 1];
+      draft[i + 2] = original[nearest + 2];
+    }
+  }
+
   const atlas = document.createElement('canvas');
   atlas.width = atlas.height = SIZE;
   const actx = atlas.getContext('2d');
   const tileIndex = {};
 
+  function paintAtlasTile(name, painter, idx) {
+    const seed = 0x5eed + idx * 7919;
+    const draft = new Uint8ClampedArray(TS * TS * 4);
+    painter(draft, N.mulberry32(seed));
+    padTransparentColors(draft);
+    const img = actx.createImageData(ATLAS_TS, ATLAS_TS);
+    img.data.set(refineTile(draft, name, seed));
+    actx.putImageData(img, (idx % GRID) * ATLAS_TS, Math.floor(idx / GRID) * ATLAS_TS);
+  }
+
   order.forEach((name, i) => {
-    const img = actx.createImageData(TS, TS);
-    painters[name](img.data, N.mulberry32(0x5eed + i * 7919));
-    actx.putImageData(img, (i % GRID) * TS, Math.floor(i / GRID) * TS);
+    paintAtlasTile(name, painters[name], i);
     tileIndex[name] = i;
   });
+
+  const variants = {};
+  for (const name of variantNames) {
+    const base = tileIndex[name];
+    variants[base] = [base, tileIndex[name + '_variant_1'],
+      tileIndex[name + '_variant_2'], tileIndex[name + '_variant_3']];
+  }
+
+  function variant(index, x, y, z, face) {
+    const choices = variants[index];
+    if (!choices) return index;
+    let h = Math.imul(x, 73856093) ^ Math.imul(y, 19349663) ^
+      Math.imul(z, 83492791) ^ Math.imul(face, 2654435761);
+    h = Math.imul(h ^ (h >>> 13), 1274126177);
+    h ^= h >>> 16;
+    return choices[(h >>> 0) & 3];
+  }
 
   function addTile(name, painter) {
     if (tileIndex[name] !== undefined) return tileIndex[name];
@@ -719,9 +837,7 @@
     if (idx >= GRID * GRID) throw new Error('图集已满');
     order.push(name);
     painters[name] = painter;
-    const img = actx.createImageData(TS, TS);
-    painter(img.data, N.mulberry32(0x5eed + idx * 7919));
-    actx.putImageData(img, (idx % GRID) * TS, Math.floor(idx / GRID) * TS);
+    paintAtlasTile(name, painter, idx);
     tileIndex[name] = idx;
     return idx;
   }
@@ -731,7 +847,7 @@
   function uv(t) {
     if (uvCache.has(t)) return uvCache.get(t);
     const col = t % GRID, row = (t / GRID) | 0;
-    const pad = 0.5 / SIZE;
+    const pad = 1 / SIZE;
     const r = [col / GRID + pad, row / GRID + pad, (col + 1) / GRID - pad, (row + 1) / GRID - pad];
     uvCache.set(t, r);
     return r;
@@ -821,13 +937,14 @@
     const S = size || canvas.width;
     canvas.width = canvas.height = S;
     ctx.clearRect(0, 0, S, S);
-    ctx.imageSmoothingEnabled = false;
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
     if (!B || !B.tex) return;
 
     if (id === TORCH) {
       const t = B.tex.side;
-      const col = (t % GRID) * TS, row = ((t / GRID) | 0) * TS;
-      ctx.drawImage(atlas, col, row, TS, TS, S * 0.12, S * 0.04, S * 0.76, S * 0.92);
+      const col = (t % GRID) * ATLAS_TS, row = ((t / GRID) | 0) * ATLAS_TS;
+      ctx.drawImage(atlas, col, row, ATLAS_TS, ATLAS_TS, S * 0.12, S * 0.04, S * 0.76, S * 0.92);
       return;
     }
 
@@ -837,10 +954,10 @@
     const top = B.tex.top, side = B.tex.side;
 
     function face(t, oxx, oyy, ux, uy, vx, vy, shade) {
-      const col = (t % GRID) * TS, row = ((t / GRID) | 0) * TS;
+      const col = (t % GRID) * ATLAS_TS, row = ((t / GRID) | 0) * ATLAS_TS;
       ctx.save();
-      ctx.setTransform(ux / TS, uy / TS, vx / TS, vy / TS, oxx, oyy);
-      ctx.drawImage(atlas, col, row, TS, TS, 0, 0, TS, TS);
+      ctx.setTransform(ux / ATLAS_TS, uy / ATLAS_TS, vx / ATLAS_TS, vy / ATLAS_TS, oxx, oyy);
+      ctx.drawImage(atlas, col, row, ATLAS_TS, ATLAS_TS, 0, 0, ATLAS_TS, ATLAS_TS);
       ctx.restore();
       if (shade > 0) {
         ctx.beginPath();
@@ -859,7 +976,7 @@
     face(side, ox + w / 2, oy + h, w / 2, -w * 0.25, 0, h, 0.14);
   }
 
-  MC.Atlas = { canvas: atlas, size: SIZE, tile: TS, grid: GRID, uv, index: tileIndex };
+  MC.Atlas = { canvas: atlas, size: SIZE, tile: ATLAS_TS, grid: GRID, uv, variant, index: tileIndex };
   MC.BLOCKS = BLOCKS;
   MC.Block = {
     isSolid, isOpaque, isLiquid,

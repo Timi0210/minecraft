@@ -72,11 +72,13 @@
         const field = this.world.biomeField(x, z);
         const h = this.world.heightAt(x, z, field);
         const biome = this.world.biomeAt(x, z, h, field);
+        const glacier = this.world.glacierWeight ? this.world.glacierWeight(x, z) : 0;
         const i = row * SIDE + col;
         this.heights[i] = Math.max(MC.WORLD.SEA + 0.8, h + 0.8);
         this.tiles[i] = h <= MC.WORLD.SEA ? B.WATER :
           biome === 'desert' || biome === 'beach' ? B.SAND :
-          biome === 'badlands' ? B.TERRACOTTA : biome === 'snow' ? B.SNOW : B.GRASS;
+          biome === 'badlands' ? B.TERRACOTTA :
+          biome === 'snow' || (glacier > 0.40 && h < 82) ? B.SNOW : B.GRASS;
       }
     }
 

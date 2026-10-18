@@ -5,14 +5,17 @@ const vm = require('vm');
 const assert = require('assert');
 
 const root = path.resolve(__dirname, '..');
-const canvas = () => ({
-  getContext: () => ({
+const canvas = () => {
+  const surface = { writes: [], drawCalls: [] };
+  surface.getContext = () => ({
     createImageData: (w, h) => ({ data: new Uint8ClampedArray(w * h * 4) }),
-    putImageData: () => {},
+    putImageData: (img, x, y) => surface.writes.push({ img, x, y }),
+    drawImage: (...args) => surface.drawCalls.push(args),
     fillRect: () => {},
     clearRect: () => {}
-  })
-});
+  });
+  return surface;
+};
 const context = vm.createContext({
   console, performance, Math, Uint8Array, Uint32Array, Uint8ClampedArray, Float32Array,
   Int16Array, Map, Set, Array, window: {}, document: { createElement: canvas }
@@ -23,6 +26,26 @@ for (const file of ['noise', 'blocks', 'world', 'mesher', 'renderer',
   vm.runInContext(source, context, { filename: file + '.js' });
 }
 const MC = context.window.MC;
+
+// 图集应输出含有真实子像素细节的 64px 材质，图标也从新图集裁切。
+assert.equal(MC.Atlas.tile, 64);
+assert.equal(MC.Atlas.size, 1024);
+const stoneTile = MC.Atlas.canvas.writes[MC.Atlas.index.stone];
+assert.equal(stoneTile.img.data.length, 64 * 64 * 4);
+const stone = stoneTile.img.data;
+let detailedCells = 0;
+for (let by = 0; by < 16; by++) for (let bx = 0; bx < 16; bx++) {
+  const p = ((by * 4) * 64 + bx * 4) * 4;
+  if (stone[p] !== stone[p + 4] || stone[p] !== stone[p + 64 * 4]) detailedCells++;
+}
+assert(detailedCells > 200, '64px stone texture must contain fine detail within old 16px cells');
+const stoneVariants = new Set();
+for (let x = 0; x < 16; x++) stoneVariants.add(MC.Atlas.variant(MC.Atlas.index.stone, x, 12, 4, 0));
+assert.equal(stoneVariants.size, 4);
+const icon = canvas();
+icon.width = 32;
+MC.itemIcon(icon, 100, 32);
+assert.equal(icon.drawCalls[0][3], 64);
 
 function chunk(cx, cz) {
   return {
@@ -261,6 +284,22 @@ assert.equal(open.sites.filter(s => s.type === 'origin').length, 1);
 assert(open.sites.some(s => s.type === 'cabin'));
 assert(open.sites.some(s => s.type === 'giant'));
 assert(open.sites.some(s => s.type === 'guardian'));
+// 新冰川谷应是可进入的雪原，后方主峰高出谷底，且峰顶仍在世界高度内。
+const glacier = open.glacier;
+const valleyY = open.heightAt(glacier.x, glacier.z);
+const summitX = Math.round(open.peaks[0][0]), summitZ = Math.round(open.peaks[0][1]);
+const summitY = open.heightAt(summitX, summitZ);
+assert(open.glacierWeight(glacier.x, glacier.z) > 0.8);
+assert(summitY - valleyY >= 48);
+assert(summitY < MC.WORLD.HEIGHT - 8);
+assert(open.outpost.y + 22 < MC.WORLD.HEIGHT);
+assert(open.biomeField(980, 260).mountain > 0.7);
+assert(open.heightAt(980, 260) > 78);
+for (const [x, z, expected] of [[glacier.x, glacier.z, MC.Block.SNOW],
+  [summitX, summitZ, MC.Block.STONE]]) {
+  open.ensureChunk(x >> 4, z >> 4);
+  assert.equal(open.getBlock(x, open.heightAt(x, z), z), expected);
+}
 open.ensureChunk(0, 0);
 assert.equal(open.getBlock(0, open.sites.find(s => s.type === 'origin').y + 1, 0), MC.Block.TABLET);
 assert(open.lore.size >= 1);

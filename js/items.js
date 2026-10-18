@@ -1,4 +1,4 @@
-/* items.js — 物品注册表：方块物品、材料、五档工具，全部程序化 16×16 图标 */
+/* items.js — 物品注册表：程序化画稿，经 64×64 图集输出 */
 (function () {
   'use strict';
   const MC = window.MC;
@@ -315,11 +315,14 @@
     canvas.width = canvas.height = S;
     const ctx = canvas.getContext('2d');
     ctx.clearRect(0, 0, S, S);
-    ctx.imageSmoothingEnabled = false;
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
     const tile = it.sprite;
     const col = tile % MC.Atlas.grid, row = (tile / MC.Atlas.grid) | 0;
     const pad = S * 0.04;
-    ctx.drawImage(MC.Atlas.canvas, col * TS, row * TS, TS, TS, pad, pad, S - pad * 2, S - pad * 2);
+    const atlasTile = MC.Atlas.tile;
+    ctx.drawImage(MC.Atlas.canvas, col * atlasTile, row * atlasTile,
+      atlasTile, atlasTile, pad, pad, S - pad * 2, S - pad * 2);
   }
 
   const byId = (id) => ITEMS[id] || null;

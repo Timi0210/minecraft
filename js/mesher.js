@@ -100,7 +100,8 @@
 
             if (y === 0 && F.ky === -1) continue;
             const out = B.transparent ? tra : opa;
-            const uv = MC.Atlas.uv(B.tex[F.key]);
+            const texture = MC.Atlas.variant(B.tex[F.key], wx, y, wz, f);
+            const uv = MC.Atlas.uv(texture);
             const u0 = uv[0], v0 = uv[1], du = uv[2] - uv[0], dv = uv[3] - uv[1];
             const base = out.verts.length / 10;
             const lv = [0, 0, 0, 0];
