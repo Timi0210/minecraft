@@ -1211,7 +1211,7 @@
   }
 
   /* ================= 相机 ================= */
-  const cam = { x: 0, y: 0, z: 0, yaw: 0, pitch: 0, fov: 65, fogFar: 120 };
+  const cam = { x: 0, y: 0, z: 0, yaw: 0, pitch: 0, fov: 65, fogFar: 700 };
   const hand = { itemId: 0, swing: 1, bobPhase: 0, bobAmount: 0 };
   function updateCamera(dt) {
     const e = player.eye();
@@ -1224,7 +1224,7 @@
       cam.y += 17;
       cam.pitch = -0.34;
     }
-    cam.fogFar = 440;
+    cam.fogFar = 700;
     const under = MC.Block.isLiquid(world.getBlock(Math.floor(cam.x), Math.floor(cam.y), Math.floor(cam.z)));
     if (under !== cam.underwater) {
       cam.underwater = under;

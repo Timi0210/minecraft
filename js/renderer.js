@@ -853,7 +853,7 @@ void main() { fragColor = vColor; }`;
       gl.viewport(0, 0, W, H);
 
       const aspect = W / H;
-      M4.perspective(this.proj, (cam.fov || 65) * Math.PI / 180, aspect, 0.08, 570);
+      M4.perspective(this.proj, (cam.fov || 65) * Math.PI / 180, aspect, 0.08, 820);
       viewMatrix(this.view, cam);
       M4.mul(this.vp, this.proj, this.view);
       M4.invert(this.invVP, this.vp);
@@ -864,7 +864,7 @@ void main() { fragColor = vColor; }`;
       const light = lightingAt(time);
       const fogCol = under ? UNDERWATER_FOG : light.horizon;
       const fogFar = under ? 20 : (cam.fogFar || 130);
-      this.fogNear = under ? 0.8 : fogFar * 0.36;
+      this.fogNear = under ? 0.8 : fogFar * 0.68;
       this.fogFar = fogFar;
 
       const shadowActive = this.shadowEnabled && light.shadow && !under;

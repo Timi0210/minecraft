@@ -53,7 +53,7 @@
   // 每个站点会占用的最大水平半径，用于区块生成时的快速裁剪。
   const SITE_RADIUS = {
     origin: 6, sword: 5, cairn: 4, cabin: 17, lab: 8, ship: 8, bench: 4,
-    sky: 10, tablet: 3, giant: 12, lighthouse: 7, arch: 7, guardian: 7
+    sky: 10, tablet: 3, giant: 12, lighthouse: 7, arch: 7
   };
 
 
@@ -1022,9 +1022,7 @@
           ok: (x, z, h, b) => this.nearWater(x, z, 14) && this.flat(x, z, 3) },
         { type: 'arch', min: 150, max: 420, radius: 11,
           ok: (x, z, h, b) => (b === 'plains' || b === 'desert' || b === 'badlands') &&
-            this.flat(x, z, 5) },
-        { type: 'guardian', min: 150, max: 460, radius: 9,
-          ok: (x, z, h, b) => (b === 'mountain' || b === 'taiga' || b === 'snow') }
+            this.flat(x, z, 5) }
       ];
       for (const d of defs) {
         const site = this.findSite(spawn.x, spawn.z, d.min, d.max, (x, z, h, b) =>
@@ -1082,7 +1080,6 @@
           case 'giant': this.buildGiant(chunk, s); break;
           case 'lighthouse': this.buildLighthouse(chunk, s); break;
           case 'arch': this.buildArch(chunk, s); break;
-          case 'guardian': this.buildGuardian(chunk, s); break;
         }
       }
     }
@@ -1357,28 +1354,6 @@
           this.put(chunk, x + dx, y + dy, z + dz, dy === 28 ? B.STONE : B.COBBLE);
       }
       for (let dx = -5; dx <= 5; dx++) this.put(chunk, x + dx, y + 29, z, B.MOSS, true);
-    }
-
-    buildGuardian(chunk, s) {
-      const { x, z } = s, y = s.y;
-      for (let dz = -4; dz <= 4; dz++) for (let dx = -4; dx <= 4; dx++) {
-        this.fillBelow(chunk, x + dx, y, z + dz);
-        this.put(chunk, x + dx, y, z + dz, B.COBBLE);
-      }
-      const block = (dx0, dx1, dy0, dy1, dz0, dz1) => {
-        for (let dy = dy0; dy <= dy1; dy++)
-          for (let dz = dz0; dz <= dz1; dz++)
-            for (let dx = dx0; dx <= dx1; dx++)
-              this.put(chunk, x + dx, y + dy, z + dz,
-                N.hash2(x + dx, dy * 31 + z + dz, this.seed + 9137) > 0.82 ? B.MOSS : B.STONE);
-      };
-      block(-3, -1, 1, 8, -1, 1);
-      block(1, 3, 1, 8, -1, 1);
-      block(-3, 3, 9, 16, -1, 1);
-      block(-5, -4, 9, 15, -1, 1);
-      block(4, 5, 9, 15, -1, 1);
-      block(-2, 2, 17, 21, -1, 1);
-      for (const dx of [-1, 1]) this.put(chunk, x + dx, y + 19, z - 2, B.TORCH);
     }
 
     nearTree(x, z) {

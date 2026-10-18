@@ -13,7 +13,7 @@
     static normalize(value) {
       const v = value && typeof value === 'object' ? value : {};
       return {
-        distance: [6, 8, 10].includes(v.distance) ? v.distance : 8,
+        distance: [8, 10, 12].includes(v.distance) ? v.distance : 10,
         resolution: [0.65, 0.85, 1].includes(v.resolution) ? v.resolution : 1,
         fov: Number.isFinite(v.fov) ? Math.max(55, Math.min(95, v.fov)) : 65,
         shadows: typeof v.shadows === 'boolean' ? v.shadows : true,

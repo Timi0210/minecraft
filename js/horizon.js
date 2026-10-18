@@ -2,7 +2,7 @@
 (function () {
   'use strict';
   const MC = window.MC;
-  const STEP = 4, CELLS = 256, SIDE = CELLS + 1;
+  const STEP = 4, CELLS = 400, SIDE = CELLS + 1;
   const HALF = CELLS * STEP / 2;
 
   class Horizon {
