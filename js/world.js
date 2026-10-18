@@ -118,12 +118,20 @@
     }
 
     ensureChunk(cx, cz) {
+      return this.installChunk(cx, cz);
+    }
+
+    // 后台线程送回完整方块数组时，只在主线程登记光源与接缝。
+    installChunk(cx, cz, blocks) {
       const key = cx + ',' + cz;
       let c = this.chunks.get(key);
       if (!c) {
         c = new Chunk(cx, cz);
         this.chunks.set(key, c);
-        this.generate(c);
+        if (blocks) {
+          c.blocks = blocks;
+          this.applyEdits(c);
+        } else this.generate(c);
         c.generated = true;
         c.dirty = true;
         // 旧档的火把由 edits 写入方块，生成后在这里恢复光照。

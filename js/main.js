@@ -1160,6 +1160,70 @@
   }
 
   let OFFSETS_GEN = makeOffsets(RENDER_R + 1);
+  let terrainWorker = null, terrainReady = false, terrainJob = null;
+
+  function stopTerrainWorker() {
+    if (terrainJob && terrainJob.type === 'mesh' && terrainJob.chunk)
+      terrainJob.chunk.dirty = true;
+    terrainJob = null;
+    terrainReady = false;
+    if (terrainWorker) terrainWorker.terminate();
+    terrainWorker = null;
+  }
+
+  if (typeof Worker !== 'undefined') {
+    try {
+      terrainWorker = new Worker('js/terrain-worker.js?v=1');
+      terrainWorker.onmessage = event => {
+        const result = event.data;
+        if (result.type === 'ready') { terrainReady = true; return; }
+        if (result.type === 'error') {
+          console.warn('后台地形处理失败，改用主线程', result.message);
+          stopTerrainWorker();
+          return;
+        }
+        const job = terrainJob;
+        terrainJob = null;
+        if (!job || result.type !== job.type || result.cx !== job.cx || result.cz !== job.cz) return;
+        if (result.type === 'generate') {
+          const pcx = Math.floor(player.pos[0] / 16), pcz = Math.floor(player.pos[2] / 16);
+          if (Math.abs(job.cx - pcx) <= RENDER_R + 2 && Math.abs(job.cz - pcz) <= RENDER_R + 2)
+            world.installChunk(job.cx, job.cz, new Uint8Array(result.blocks));
+        } else if (result.type === 'mesh') {
+          const chunk = world.getChunk(job.cx, job.cz);
+          if (chunk === job.chunk && !chunk.dirty) renderer.uploadChunk(chunk, result.mesh);
+        }
+      };
+      terrainWorker.onerror = error => {
+        console.warn('后台地形处理不可用，改用主线程', error.message);
+        stopTerrainWorker();
+      };
+      terrainWorker.postMessage({ type: 'init', seed });
+    } catch (error) {
+      stopTerrainWorker();
+    }
+  }
+
+  function queueTerrainJob(job) {
+    terrainJob = job;
+    try {
+      if (job.type === 'generate') {
+        terrainWorker.postMessage({ type: 'generate', cx: job.cx, cz: job.cz });
+      } else {
+        const neighbors = [];
+        for (let dz = -1; dz <= 1; dz++) for (let dx = -1; dx <= 1; dx++) {
+          const c = world.getChunk(job.cx + dx, job.cz + dz);
+          if (c && c.generated) neighbors.push({ cx: c.cx, cz: c.cz,
+            blocks: c.blocks, light: c.light, generated: true });
+        }
+        job.chunk.dirty = false;
+        terrainWorker.postMessage({ type: 'mesh', cx: job.cx, cz: job.cz, neighbors });
+      }
+    } catch (error) {
+      console.warn('后台地形任务发送失败，改用主线程', error.message);
+      stopTerrainWorker();
+    }
+  }
 
   function buildChunkMesh(chunk) {
     const mesh = MC.meshChunk(world, chunk);
@@ -1168,6 +1232,7 @@
   }
 
   function rebuildNear(x, z) {
+    if (terrainWorker) return; // 后台任务会按距离处理已标记的脏区块。
     const cx = x >> 4, cz = z >> 4;
     const list = [[cx, cz], [cx + 1, cz], [cx - 1, cz], [cx, cz + 1], [cx, cz - 1]];
     for (const [ax, az] of list) {
@@ -1177,9 +1242,23 @@
   }
 
   function stream() {
-    const deadline = performance.now() + 4;
     const pcx = Math.floor(player.pos[0] / 16);
     const pcz = Math.floor(player.pos[2] / 16);
+    if (terrainWorker) {
+      if (!terrainReady || terrainJob) return;
+      for (let i = 0; i < OFFSETS_GEN.length; i++) {
+        const o = OFFSETS_GEN[i], cx = pcx + o.dx, cz = pcz + o.dz;
+        const c = world.getChunk(cx, cz);
+        if (!c) { queueTerrainJob({ type: 'generate', cx, cz }); return; }
+        if (Math.abs(o.dx) <= RENDER_R && Math.abs(o.dz) <= RENDER_R &&
+            c.dirty && world.neighborsReady(cx, cz)) {
+          queueTerrainJob({ type: 'mesh', cx, cz, chunk: c });
+          return;
+        }
+      }
+      return;
+    }
+    const deadline = performance.now() + 4;
     let genBudget = 1, meshBudget = 1;
     // 单个区块仍是原子任务；每帧至多各做一次，超预算立即让出主线程。
     for (let i = 0; i < OFFSETS_GEN.length; i++) {

@@ -303,7 +303,7 @@ out vec3 vDir;
 void main() {
   vec4 p = uInvVP * vec4(aNdc, 1.0, 1.0);
   vDir = p.xyz / p.w - uCam;
-  gl_Position = vec4(aNdc, 0.9999, 1.0);
+  gl_Position = vec4(aNdc, 1.0, 1.0);
 }`;
 
   const FS_SKY = `#version 300 es
@@ -580,6 +580,8 @@ void main() { fragColor = vColor; }`;
       this.mistLayout = [];
       this.planes = [];
       for (let i = 0; i < 6; i++) this.planes.push(new Float32Array(4));
+      this.shadowPlanes = [];
+      for (let i = 0; i < 6; i++) this.shadowPlanes.push(new Float32Array(4));
       this.stats = { drawn: 0, faces: 0 };
       this._t = 0;
 
@@ -715,8 +717,7 @@ void main() { fragColor = vColor; }`;
     }
 
     /* ---------- 视锥 ---------- */
-    setFrustum(m) {
-      const p = this.planes;
+    setFrustum(m, p = this.planes) {
       const rows = [
         [m[0], m[4], m[8], m[12]],
         [m[1], m[5], m[9], m[13]],
@@ -740,8 +741,7 @@ void main() { fragColor = vColor; }`;
       set(p[5], r3, r2, -1);  // far
     }
 
-    boxVisible(minX, minY, minZ, maxX, maxY, maxZ) {
-      const p = this.planes;
+    boxVisible(minX, minY, minZ, maxX, maxY, maxZ, p = this.planes) {
       for (let i = 0; i < 6; i++) {
         const pl = p[i];
         const x = pl[0] > 0 ? maxX : minX;
@@ -766,6 +766,7 @@ void main() { fragColor = vColor; }`;
       this.lightProj[12] += (Math.round(ox) - ox) * 2 / SHADOW_SIZE;
       this.lightProj[13] += (Math.round(oy) - oy) * 2 / SHADOW_SIZE;
       M4.mul(this.lightVP, this.lightProj, this.lightView);
+      this.setFrustum(this.lightVP, this.shadowPlanes);
 
       gl.bindFramebuffer(gl.FRAMEBUFFER, this.shadowFBO);
       gl.viewport(0, 0, this.shadowSize, this.shadowSize);
@@ -787,6 +788,8 @@ void main() { fragColor = vColor; }`;
         const c = chunks[i];
         if (!c.gpu || !c.gpu.opaque) continue;
         if (Math.abs(c.cx * 16 + 8 - cam.x) > 72 || Math.abs(c.cz * 16 + 8 - cam.z) > 72) continue;
+        if (!this.boxVisible(c.cx * 16, 0, c.cz * 16,
+          c.cx * 16 + 16, MC.WORLD.HEIGHT, c.cz * 16 + 16, this.shadowPlanes)) continue;
         gl.bindVertexArray(c.gpu.opaque.vao);
         gl.drawElements(gl.TRIANGLES, c.gpu.opaque.count, gl.UNSIGNED_INT, 0);
       }
@@ -874,28 +877,6 @@ void main() { fragColor = vColor; }`;
       gl.clearColor(fogCol[0], fogCol[1], fogCol[2], 1);
       gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 
-      /* --- 天空（水下不画，直接用水色背景） --- */
-      if (!under) {
-        gl.disable(gl.DEPTH_TEST);
-        gl.depthMask(false);
-        gl.disable(gl.CULL_FACE);
-        gl.useProgram(this.progSky);
-        gl.uniformMatrix4fv(this.uSky.uInvVP, false, this.invVP);
-        gl.uniform3f(this.uSky.uCam, cam.x, cam.y, cam.z);
-        gl.uniform1f(this.uSky.uTime, time);
-        gl.uniform1f(this.uSky.uCloudY, 160);
-        gl.uniform3fv(this.uSky.uSunDir, light.sun);
-        gl.uniform3fv(this.uSky.uZenith, light.zenith);
-        gl.uniform3fv(this.uSky.uHorizon, light.horizon);
-        gl.uniform1f(this.uSky.uDay, light.day);
-        gl.uniform1f(this.uSky.uTwilight, light.twilight);
-        gl.bindVertexArray(this.skyVAO);
-        gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
-        gl.depthMask(true);
-        gl.enable(gl.DEPTH_TEST);
-        gl.enable(gl.CULL_FACE);
-      }
-
       /* --- 不透明区块 --- */
       gl.useProgram(this.progMain);
       const u = this.uMain;
@@ -975,6 +956,29 @@ void main() { fragColor = vColor; }`;
         gl.uniform1f(u.uHitFlash, 0);
         gl.uniform1f(u.uGlow, 0);
         gl.uniform1f(u.uMobLight, 0);
+      }
+
+      /* --- 天空只填没有地形的像素，避免被山体覆盖的云仍全屏计算。 --- */
+      if (!under) {
+        gl.depthFunc(gl.LEQUAL);
+        gl.depthMask(false);
+        gl.disable(gl.CULL_FACE);
+        gl.useProgram(this.progSky);
+        gl.uniformMatrix4fv(this.uSky.uInvVP, false, this.invVP);
+        gl.uniform3f(this.uSky.uCam, cam.x, cam.y, cam.z);
+        gl.uniform1f(this.uSky.uTime, time);
+        gl.uniform1f(this.uSky.uCloudY, 160);
+        gl.uniform3fv(this.uSky.uSunDir, light.sun);
+        gl.uniform3fv(this.uSky.uZenith, light.zenith);
+        gl.uniform3fv(this.uSky.uHorizon, light.horizon);
+        gl.uniform1f(this.uSky.uDay, light.day);
+        gl.uniform1f(this.uSky.uTwilight, light.twilight);
+        gl.bindVertexArray(this.skyVAO);
+        gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+        gl.depthMask(true);
+        gl.depthFunc(gl.LESS);
+        gl.enable(gl.CULL_FACE);
+        gl.useProgram(this.progMain);
       }
 
       /* --- 透明区块（远到近） --- */

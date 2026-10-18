@@ -794,9 +794,10 @@
     }
   }
 
-  const atlas = document.createElement('canvas');
-  atlas.width = atlas.height = SIZE;
-  const actx = atlas.getContext('2d');
+  // 后台地形线程只需要方块定义和 UV；纹理图集仍由主线程完整绘制。
+  const atlas = MC.skipAtlas ? null : document.createElement('canvas');
+  if (atlas) atlas.width = atlas.height = SIZE;
+  const actx = atlas ? atlas.getContext('2d') : null;
   const tileIndex = {};
 
   function paintAtlasTile(name, painter, idx) {
@@ -810,7 +811,7 @@
   }
 
   order.forEach((name, i) => {
-    paintAtlasTile(name, painters[name], i);
+    if (actx) paintAtlasTile(name, painters[name], i);
     tileIndex[name] = i;
   });
 
@@ -837,7 +838,7 @@
     if (idx >= GRID * GRID) throw new Error('图集已满');
     order.push(name);
     painters[name] = painter;
-    paintAtlasTile(name, painter, idx);
+    if (actx) paintAtlasTile(name, painter, idx);
     tileIndex[name] = idx;
     return idx;
   }
