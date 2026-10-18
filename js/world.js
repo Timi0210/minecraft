@@ -64,6 +64,16 @@
         [326 + (N.hash2(3, 0, this.seed + 19001) - 0.5) * 24,
           318 + (N.hash2(4, 0, this.seed + 19001) - 0.5) * 24, 112, 98, 52]
       ];
+      this.valley = {
+        x: Math.round(this.peaks[0][0] - 63), z: Math.round(this.peaks[0][1] - 56),
+        rx: 68, rz: 52
+      };
+      const v = this.valley;
+      this.camp = { x: v.x - 67, z: v.z - 19, y: 0 };
+      let campY = 0;
+      for (let dz = -6; dz <= 6; dz += 3) for (let dx = -7; dx <= 7; dx += 3)
+        campY = Math.max(campY, this.heightAt(this.camp.x + dx, this.camp.z + dz));
+      this.camp.y = Math.max(SEA + 3, campY + 1);
       this.trails = this.peaks.map((peak, index) => this.makePeakTrail(peak, index));
       this.trailIndex = new Map();
       for (const trail of this.trails) {
@@ -81,6 +91,29 @@
           }
         }
       }
+      // 前哨站位于两座雪山之间的山肩，屋顶高度按当地地势确定。
+      const outpostX = Math.round(this.peaks[0][0] + 105);
+      const outpostZ = Math.round(this.peaks[0][1] - 8);
+      let outpostY = 0;
+      for (let dz = -20; dz <= 22; dz += 4) for (let dx = -31; dx <= 29; dx += 4)
+        outpostY = Math.max(outpostY, this.heightAt(outpostX + dx, outpostZ + dz));
+      this.outpost = { x: outpostX, z: outpostZ, y: Math.min(116, outpostY + 1) };
+      this.arch = { x: v.x + 78, z: v.z - 12 };
+      this.arch.y = this.heightAt(this.arch.x, this.arch.z) + 1;
+      this.landmarks = [
+        { id: 'camp', name: '湖畔营地', x: this.camp.x, y: this.camp.y, z: this.camp.z, icon: '⌂', note: '从篝火出发，沿木栈道走向湖面。' },
+        { id: 'arch', name: '回声石门', x: this.arch.x, y: this.arch.y, z: this.arch.z, icon: '◇', note: '湖对岸的石门，留着旧世界的痕迹。' },
+        { id: 'outpost', name: '霜线前哨', x: this.outpost.x, y: this.outpost.y, z: this.outpost.z, icon: '▣', note: '山肩上的旧堡垒与登山步道相邻。' },
+        ...this.peaks.map((p, i) => ({ id: 'peak' + i, name: i ? '北境之巅' : '云上之巅',
+          x: Math.round(p[0]), y: this.heightAt(Math.round(p[0]), Math.round(p[1])), z: Math.round(p[1]),
+          icon: '△', note: '沿金色步道登顶，寻找山顶的奖励。' }))
+      ];
+      this.beaconLights = [
+        [this.camp.x - 3, this.camp.y + 1, this.camp.z - 3],
+        [this.camp.x + 3, this.camp.y + 1, this.camp.z + 3],
+        [this.arch.x - 4, this.arch.y + 1, this.arch.z],
+        [this.arch.x + 4, this.arch.y + 1, this.arch.z]
+      ];
       if (savedEdits && savedEdits.length) {
         for (let i = 0; i < savedEdits.length; i++) {
           const e = savedEdits[i];
@@ -112,6 +145,11 @@
           const y = Math.floor(index / 256), z = (index >> 4) & 15, x = index & 15;
           this.lightSources.set((cx * 16 + x) + ',' + y + ',' + (cz * 16 + z),
             [cx * 16 + x, y, cz * 16 + z]);
+        }
+        for (const source of this.beaconLights) {
+          if ((source[0] >> 4) !== cx || (source[2] >> 4) !== cz) continue;
+          if (c.get(source[0] & 15, source[1], source[2] & 15) === B.TORCH)
+            this.lightSources.set(source.join(','), source);
         }
         for (const source of this.lightSources.values()) {
           if (source[0] >= cx * 16 - 14 && source[0] < cx * 16 + 30 &&
@@ -302,8 +340,19 @@
       // Small scallops along the material boundary; elevation keeps its smooth blend.
       const edgeX = (N.noise2(x * 0.034, z * 0.034, s + 6503) - 0.5) * 0.24;
       const edgeZ = (N.noise2(x * 0.034, z * 0.034, s + 7703) - 0.5) * 0.24;
-      const biome = this.regionBiome(ix + (gx - ix > 0.5 + edgeX ? 1 : 0),
+      let biome = this.regionBiome(ix + (gx - ix > 0.5 + edgeX ? 1 : 0),
         iz + (gz - iz > 0.5 + edgeZ ? 1 : 0));
+      if (this.valley) {
+        const v = this.valley;
+        const radius = Math.hypot((x - v.x) / (v.rx * 1.7), (z - v.z) / (v.rz * 1.7));
+        if (radius < 1) {
+          const blend = 1 - smoothstep(0.65, 1, radius);
+          height = height * (1 - blend) + 2 * blend;
+          badlands *= 1 - blend; dry *= 1 - blend; snow *= 1 - blend;
+          mountain *= 1 - blend;
+          if (radius < 0.82) biome = 'plains';
+        }
+      }
       return { biome, height, mountain, badlands, dry, snow };
     }
 
@@ -315,8 +364,11 @@
         const p = this.peaks[i], dx = (x - p[0]) / p[2], dz = (z - p[1]) / p[3];
         const q = dx * dx + dz * dz;
         if (q < 1) {
-          const taper = 1 - q;
-          rise += p[4] * taper * taper * taper;
+          const radius = Math.sqrt(q);
+          const taper = 1 - radius;
+          const spine = Math.max(0, Math.cos(Math.atan2(dz, dx) * 7 + i * 1.4));
+          rise += p[4] * Math.pow(taper, 1.24) +
+            12 * spine * spine * spine * radius * taper;
         }
       }
       return rise;
@@ -396,6 +448,17 @@
       const cut = smoothstep(0.13, 0.025, river) * (1 - field.mountain * 0.7) *
         (1 - smoothstep(3, 24, summit));
       h -= cut * Math.max(0, h - SEA + 1);
+      if (this.valley) {
+        const v = this.valley;
+        const radius = Math.hypot((x - v.x) / v.rx, (z - v.z) / v.rz) +
+          (N.noise2(x * 0.042, z * 0.042, s + 5221) - 0.5) * 0.07;
+        if (radius < 1.8) {
+          const basin = 25 + 20 * smoothstep(0.28, 1.55, radius) +
+            (N.noise2(x * 0.075, z * 0.075, s + 5213) - 0.5) * 2.5;
+          const blend = 1 - smoothstep(1.15, 1.8, radius);
+          h = h * (1 - blend) + basin * blend;
+        }
+      }
       return Math.max(5, Math.min(MAX_TERRAIN, Math.round(h)));
     }
 
@@ -469,12 +532,26 @@
           const snowy = h >= snowline || (!redlands && field.snow >
             0.28 + N.noise2(wx * 0.052, wz * 0.052, this.seed + 4103) * 0.45);
           const rocky = slope >= 4 || h >= 64;
-          const alpine = h > 74 && (field.mountain > 0.42 || this.peakRise(wx, wz) > 6);
+          const peakStrength = this.peakRise(wx, wz);
+          const alpine = h > 74 && (field.mountain > 0.42 || peakStrength > 6);
+          let rockRib = false, icefall = false;
+          if (peakStrength > 10 && h > 78) {
+            const p0 = this.peaks[0], p1 = this.peaks[1];
+            const d0 = (wx - p0[0]) ** 2 + (wz - p0[1]) ** 2;
+            const d1 = (wx - p1[0]) ** 2 + (wz - p1[1]) ** 2;
+            const peak = d0 < d1 ? p0 : p1;
+            const angle = Math.atan2(wz - peak[1], wx - peak[0]);
+            const warp = (N.noise2(wx * 0.025, wz * 0.025, this.seed + 28111) - 0.5) * 1.3;
+            rockRib = slope >= 1 && Math.sin(angle * 7 + warp) > 0.78;
+            icefall = h > 89 && peakStrength > 22 &&
+              Math.sin(angle * 4 + warp * 0.45 + 1.7) > 0.965;
+          }
           const rockPatch = alpine && snowy && slope >= 1 &&
             N.noise2(wx * 0.021, wz * 0.021, this.seed + 28013) +
-            N.noise2(wx * 0.092, wz * 0.092, this.seed + 28031) * 0.24 > 0.95;
-          const icePatch = rockPatch &&
-            N.hash2(Math.floor(wx / 7), Math.floor(wz / 7), this.seed + 28049) > 0.76;
+            N.noise2(wx * 0.092, wz * 0.092, this.seed + 28031) * 0.24 >
+            (peakStrength > 10 ? 0.72 : 0.95) || rockRib;
+          const icePatch = icefall || (rockPatch &&
+            N.hash2(Math.floor(wx / 7), Math.floor(wz / 7), this.seed + 28049) > 0.9);
           const mossy = (biome === 'forest' || biome === 'taiga') &&
             N.noise2(wx * 0.042, wz * 0.042, this.seed + 2277) > 0.66;
           const surface = snowy ? (icePatch ? B.ICE : rockPatch ? B.STONE : B.SNOW) :
@@ -507,7 +584,10 @@
       this.decorateCaves(chunk);
       this.placeTrees(chunk);
       this.placeBoulders(chunk);
+      this.placeAlpineDetails(chunk);
       this.placePetals(chunk);
+      this.placeAlpineOutpost(chunk);
+      this.placeFrontierLandmarks(chunk);
       this.placePeakTrail(chunk);
       this.placeSummitShrines(chunk);
       this.applyEdits(chunk);
@@ -564,6 +644,129 @@
           for (let sy = ground + 1; sy < y; sy++) this.put(chunk, x, sy, z, B.COBBLE);
         }
         this.put(chunk, x, y, z, y >= 80 ? B.SNOW : B.COBBLE);
+      }
+    }
+
+    placeAlpineOutpost(chunk) {
+      const site = this.outpost;
+      const bx = chunk.cx * CHUNK, bz = chunk.cz * CHUNK;
+      if (bx > site.x + 30 || bx + CHUNK - 1 < site.x - 31 ||
+          bz > site.z + 27 || bz + CHUNK - 1 < site.z - 20) return;
+      const x0 = site.x, z0 = site.z, base = site.y;
+      const build = (left, top, right, bottom, floor, wallHeight, doorSide) => {
+        const x1 = Math.max(bx, x0 + left), x2 = Math.min(bx + 15, x0 + right);
+        const z1 = Math.max(bz, z0 + top), z2 = Math.min(bz + 15, z0 + bottom);
+        for (let z = z1; z <= z2; z++) for (let x = x1; x <= x2; x++) {
+          const rx = x - x0, rz = z - z0;
+          const edgeX = rx === left || rx === right, edgeZ = rz === top || rz === bottom;
+          const wall = edgeX || edgeZ;
+          const door = doorSide === 'south' && rz === bottom && Math.abs(rx - (left + right) / 2) <= 1;
+          const h = this.heightAt(x, z);
+          for (let y = h + 1; y <= floor; y++) this.put(chunk, x, y, z, B.STONE);
+          this.put(chunk, x, floor, z, B.STONE);
+          for (let dy = 1; dy < wallHeight; dy++) {
+            let block = B.AIR;
+            if (wall && !(door && dy <= 3)) {
+              const pillar = (edgeX && rz % 5 === 0) || (edgeZ && rx % 5 === 0) || (edgeX && edgeZ);
+              const window = dy >= 4 && dy <= 5 && !pillar &&
+                ((edgeZ && Math.abs(rx) % 5 === 2) || (edgeX && Math.abs(rz) % 5 === 2));
+              block = pillar ? B.COBBLE : window ? B.GLASS :
+                (dy === 2 || dy === wallHeight - 2) ? B.WHITE_TERRACOTTA : B.STONE;
+            }
+            this.put(chunk, x, floor + dy, z, block);
+          }
+          this.put(chunk, x, floor + wallHeight, z, B.WHITE_TERRACOTTA);
+          this.put(chunk, x, floor + wallHeight + 1, z,
+            (edgeX || edgeZ || N.hash2(x, z, this.seed + 28191) > 0.23) ? B.SNOW : B.AIR);
+        }
+      };
+      // 三栋相接的石砌建筑、错落的雪顶与中央塔楼。
+      build(-30, -13, -3, 8, base, 10, 'south');
+      build(2, -9, 27, 10, base + 2, 7, 'south');
+      build(-11, 12, 5, 21, base - 2, 6, 'south');
+      build(-3, -18, 7, -8, base + 2, 13, 'south');
+      // 暴露的外墙扶壁和屋顶通风柱，远处也能辨认出建筑轮廓。
+      for (let x = x0 - 29; x <= x0 + 27; x += 6) {
+        for (let dy = 1; dy <= 3; dy++) {
+          this.put(chunk, x, base + 10 + dy, z0 - 13, B.COBBLE);
+          this.put(chunk, x, base + 9 + dy, z0 + 10, B.COBBLE);
+        }
+      }
+      for (const [dx, dz, roof] of [[-24, -7, 10], [-17, 3, 10], [10, -3, 9], [20, 4, 9]]) {
+        this.put(chunk, x0 + dx, base + roof + 2, z0 + dz, B.COBBLE);
+        this.put(chunk, x0 + dx, base + roof + 3, z0 + dz, B.COBBLE);
+      }
+      for (const dx of [-24, -8]) for (let dy = 4; dy <= 6; dy++)
+        this.put(chunk, x0 + dx, base + dy, z0 + 8, B.BRICK);
+      for (const dx of [10, 22]) for (let dy = 4; dy <= 5; dy++)
+        this.put(chunk, x0 + dx, base + 2 + dy, z0 + 10, B.BRICK);
+      for (let dy = 1; dy <= 5; dy++) this.put(chunk, x0 + 2, base + 15 + dy, z0 - 13, B.COBBLE);
+      this.put(chunk, x0 + 2, base + 21, z0 - 13, B.GLASS);
+      // 主入口沿山坡下降，步行也能抵达，不必依赖飞行。
+      for (let dz = 9; dz <= 27; dz++) for (let dx = -18; dx <= -16; dx++) {
+        const x = x0 + dx, z = z0 + dz;
+        const ground = this.heightAt(x, z);
+        const stepY = Math.max(ground + 1, base - (dz - 8));
+        for (let y = ground + 1; y <= stepY; y++) this.put(chunk, x, y, z, B.COBBLE);
+        for (let dy = 1; dy <= 3; dy++) this.put(chunk, x, stepY + dy, z, B.AIR);
+      }
+    }
+
+    placeFrontierLandmarks(chunk) {
+      const bx = chunk.cx * CHUNK, bz = chunk.cz * CHUNK;
+      const c = this.camp;
+      if (bx <= c.x + 36 && bx + 15 >= c.x - 8 &&
+          bz <= c.z + 8 && bz + 15 >= c.z - 8) {
+        for (let z = Math.max(bz, c.z - 6); z <= Math.min(bz + 15, c.z + 6); z++)
+          for (let x = Math.max(bx, c.x - 7); x <= Math.min(bx + 15, c.x + 7); x++) {
+            const dx = x - c.x, dz = z - c.z;
+            const inside = Math.abs(dx) <= 5 && Math.abs(dz) <= 4;
+            if (inside) {
+              const ground = this.heightAt(x, z);
+              for (let y = ground + 1; y <= c.y; y++) this.put(chunk, x, y, z, B.COBBLE);
+              this.put(chunk, x, c.y, z, B.PLANKS);
+              for (let dy = 1; dy <= 5; dy++) this.put(chunk, x, c.y + dy, z, B.AIR);
+              if (Math.abs(dx) === 5 && Math.abs(dz) === 4)
+                for (let dy = 1; dy <= 4; dy++) this.put(chunk, x, c.y + dy, z, B.SPRUCE_LOG);
+              if (Math.abs(dx) <= 5 && Math.abs(dz) <= 4)
+                this.put(chunk, x, c.y + 5 + (Math.abs(dz) < 3 ? 1 : 0), z, B.SPRUCE_LEAVES);
+            }
+            if (Math.abs(dx) === 7 && Math.abs(dz) <= 5)
+              this.put(chunk, x, this.heightAt(x, z) + 1, z, B.COBBLE);
+          }
+        // 从营地向湖面伸出的木栈道。
+        for (let x = Math.max(bx, c.x + 6); x <= Math.min(bx + 15, c.x + 36); x++)
+          for (let z = Math.max(bz, c.z - 1); z <= Math.min(bz + 15, c.z + 1); z++) {
+            const ground = this.heightAt(x, z);
+            const floor = Math.max(SEA + 2, c.y - Math.floor((x - c.x) / 13));
+            if ((x - c.x) % 8 === 0)
+              for (let y = ground + 1; y < floor; y++) this.put(chunk, x, y, z, B.SPRUCE_LOG);
+            this.put(chunk, x, floor, z, B.PLANKS);
+            for (let dy = 1; dy <= 3; dy++) this.put(chunk, x, floor + dy, z, B.AIR);
+          }
+        this.put(chunk, c.x - 2, c.y + 1, c.z, B.TABLE);
+        this.put(chunk, c.x + 3, c.y + 1, c.z - 2, B.COBBLE);
+        this.put(chunk, c.x - 3, c.y + 1, c.z - 3, B.TORCH);
+        this.put(chunk, c.x + 3, c.y + 1, c.z + 3, B.TORCH);
+      }
+      const a = this.arch;
+      if (bx <= a.x + 5 && bx + 15 >= a.x - 5 &&
+          bz <= a.z + 3 && bz + 15 >= a.z - 3) {
+        for (let dx = -4; dx <= 4; dx++) for (let dz = -2; dz <= 2; dz++) {
+          const x = a.x + dx, z = a.z + dz;
+          this.put(chunk, x, a.y - 1, z, B.COBBLE);
+          for (let dy = 0; dy <= 7; dy++) {
+            const column = Math.abs(dx) >= 3 && Math.abs(dz) >= 1;
+            const lintel = dy >= 6 && Math.abs(dz) >= 1;
+            if (column || lintel) this.put(chunk, x, a.y + dy, z,
+              dy === 7 ? B.SNOW : (dy % 3 === 0 ? B.STONE : B.COBBLE));
+            else if (dy <= 5) this.put(chunk, x, a.y + dy, z, B.AIR);
+          }
+        }
+        for (const dx of [-4, 4]) {
+          this.put(chunk, a.x + dx, a.y, a.z, B.COBBLE);
+          this.put(chunk, a.x + dx, a.y + 1, a.z, B.TORCH);
+        }
       }
     }
 
@@ -683,6 +886,49 @@
       }
     }
 
+    nearPeakTrail(wx, wz, radius) {
+      for (let dz = -radius; dz <= radius; dz++) for (let dx = -radius; dx <= radius; dx++) {
+        const x = wx + dx, z = wz + dz;
+        const cells = this.trailIndex.get(this.chunkKey(x >> 4, z >> 4));
+        if (cells && cells.has(x + ',' + z)) return true;
+      }
+      return false;
+    }
+
+    placeAlpineDetails(chunk) {
+      const bx = chunk.cx * CHUNK, bz = chunk.cz * CHUNK;
+      for (let z = -4; z < CHUNK + 4; z++) for (let x = -4; x < CHUNK + 4; x++) {
+        const wx = bx + x, wz = bz + z;
+        const treeRoll = N.randomAt(wx, wz, this.seed + 28129);
+        const cragRoll = N.randomAt(wx, wz, this.seed + 28147);
+        if (treeRoll >= 0.018 && cragRoll >= 0.006) continue;
+        const peak = this.peakRise(wx, wz);
+        if (peak < 5) continue;
+        const h = this.heightAt(wx, wz);
+        const tree = h >= 64 && h <= 95 && treeRoll < 0.018;
+        const crag = h >= 83 && h <= 113 && peak > 12 && cragRoll < 0.006;
+        if (!tree && !crag) continue;
+        if (this.nearPeakTrail(wx, wz, tree ? 4 : 3)) continue;
+        const slope = Math.max(
+          Math.abs(this.heightAt(wx + 2, wz) - h), Math.abs(this.heightAt(wx - 2, wz) - h),
+          Math.abs(this.heightAt(wx, wz + 2) - h), Math.abs(this.heightAt(wx, wz - 2) - h));
+        if (tree && slope <= 3) {
+          this.placeTree(chunk, wx, h, wz, 'spruce', this.seed);
+          continue;
+        }
+        if (!crag || slope > 5) continue;
+        const ice = N.randomAt(wx, wz, this.seed + 28153) > 0.7;
+        const height = 2 + ((N.randomAt(wx, wz, this.seed + 28159) * 3) | 0);
+        for (let dy = 1; dy <= height; dy++) {
+          this.put(chunk, wx, h + dy, wz, ice ? B.ICE : B.STONE, true);
+          if (dy <= 2) {
+            this.put(chunk, wx + 1, h + dy, wz, ice ? B.ICE : B.COBBLE, true);
+            this.put(chunk, wx, h + dy, wz + 1, ice ? B.ICE : B.COBBLE, true);
+          }
+        }
+      }
+    }
+
     placeTree(chunk, wx, h, wz, kind, s) {
       const rnd = (salt) => N.randomAt(wx, wz, s + salt);
       let th, logId, leafId;
@@ -766,6 +1012,13 @@
     }
 
     findSpawn() {
+      if (this.valley) {
+        const v = this.valley;
+        const x = Math.round(v.x - v.rx * 1.15), z = Math.round(v.z + v.rz * 0.21);
+        const dx = v.x + 40 - x, dz = v.z + 25 - z;
+        return { x: x + 0.5, y: this.heightAt(x, z) + 1.2, z: z + 0.5,
+          yaw: Math.atan2(-dx, -dz), pitch: -0.055 };
+      }
       // 挑一个「靠海 + 有起伏」的出生点，第一眼就有风景
       let best = null, bestScore = -1e9;
       for (let gz = -6; gz <= 6; gz++) {

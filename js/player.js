@@ -13,7 +13,7 @@
       this.pos = [world.spawn.x, world.spawn.y, world.spawn.z];
       this.vel = [0, 0, 0];
       this.yaw = world.spawn.yaw === undefined ? 0.7 : world.spawn.yaw;
-      this.pitch = -0.12;
+      this.pitch = world.spawn.pitch === undefined ? -0.12 : world.spawn.pitch;
       this.radius = 0.3;
       this.height = 1.8;
       this.eyeH = 1.62;

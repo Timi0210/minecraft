@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
-<title>MINECRAFT · Web Edition</title>
+<title>远野 · Minecraft 体素探索</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   html, body { width: 100%; height: 100%; overflow: hidden; background: #0b0e12; }
@@ -428,6 +428,7 @@
     #invGrid { grid-template-columns: repeat(4, 1fr); }
   }
 </style>
+<link rel="stylesheet" href="css/redesign.css?v=1">
 </head>
 <body>
 <canvas id="game"></canvas>
@@ -437,20 +438,19 @@
 <div id="crosshair"></div>
 
 <div id="hud">
-  <div><b id="hPos">0 0 0</b></div>
-  <div class="dim"><span id="hFps">0</span> fps · <span id="hChunks">0</span> 区块 · <span id="hTris">0</span> 面</div>
-  <div class="dim" id="hMode">步行</div>
+  <div class="worldMark"><span class="markCube">◇</span><span>远野<small>VOXEL FRONTIER</small></span></div>
+  <div class="placeLine"><b id="hMode">探索中</b><span id="hActivity">步行 · 12:00</span></div>
+  <div id="debugStats"><b id="hPos">0 0 0</b> · <span id="hFps">0</span> fps · <span id="hChunks">0</span> 区块 · <span id="hTris">0</span> 面</div>
   <div id="miniMapWrap">
-    <div class="miniMapTitle">地形地图 <span>金线步道 · M</span></div>
-    <canvas id="miniMap" aria-label="地形小地图，显示玩家、两座雪山和金色登山步道"></canvas>
-    <div id="miniNearest">正在定位雪山…</div>
+    <div class="miniMapTitle">世界地图 <span>M 隐藏</span></div>
+    <canvas id="miniMap" aria-label="地形小地图，显示玩家、雪山、前哨站和登山步道"></canvas>
+    <div id="miniNearest">正在绘制地图…</div>
   </div>
 </div>
+<div id="compass"><span class="compassEnd">W</span><div class="compassTrack"><span id="compassNeedle">◆</span></div><span class="compassEnd">E</span><span id="compassLabel">目的地</span></div>
+<div id="objective"><span class="eyebrow">当前航标 · J 查看探索手册</span><strong id="targetName">回声石门</strong><span id="targetDistance">定位中…</span></div>
 <div id="hint">
-  <div class="hintTitle">操作速览</div>
-  <div><kbd>WASD</kbd> 移动 · <kbd>空格</kbd> 跳跃 · <kbd>Shift</kbd> 疾跑</div>
-  <div><kbd>左键</kbd> 挖掘 / 攻击 · <kbd>右键</kbd> 放置 · <kbd>1-9</kbd> 切换</div>
-  <div><kbd>E</kbd> 背包 · <kbd>F</kbd> 飞行 · <kbd>M</kbd> 地图 · <kbd>T</kbd> 时段 · <kbd>Esc</kbd> 暂停</div>
+  <span><kbd>WASD</kbd> 移动</span><span><kbd>鼠标</kbd> 建造</span><span><kbd>E</kbd> 背包</span><span><kbd>J</kbd> 探索手册</span><span><kbd>F</kbd> 飞行</span>
 </div>
 
 <div id="hotbar"></div>
@@ -460,50 +460,29 @@
 
 <div id="overlay">
   <div class="panel">
-    <div class="logo" id="title">MINECRAFT</div>
-    <div class="sub" id="subtitle">Web Edition · 手写 WebGL 体素引擎</div>
-
-    <div id="loadbox">
-      <div class="bar"><i id="barFill"></i></div>
-      <div id="loadText">正在生成世界…</div>
-    </div>
-
-    <button class="btn" id="primary" disabled>生成中…</button>
-
-    <div class="row" id="metaRow">
-      <button class="btn ghost" id="newWorld">新世界</button>
-      <button class="btn ghost" id="shadowBtn">阴影：开</button>
-      <button class="btn ghost" id="particleBtn">粒子：开</button>
-      <span class="seed" id="seedLabel"></span>
-    </div>
-
-    <div class="controls" aria-label="操作说明">
-      <div class="controlGroup">
-        <div class="controlHeading"><span>01</span> 移动与探索</div>
-        <div class="keyGrid">
-          <div><kbd>W A S D</kbd><span>移动</span></div>
-          <div><kbd>鼠标</kbd><span>环顾</span></div>
-          <div><kbd>空格</kbd><span>跳跃 / 游泳与飞行上升</span></div>
-          <div><kbd>Shift</kbd><span>疾跑 / 飞行下降</span></div>
-          <div><kbd>Ctrl</kbd><span>飞行加速</span></div>
-          <div><kbd>F</kbd><span>飞行（也可双击空格）</span></div>
-          <div><kbd>M</kbd><span>显示 / 隐藏地形地图</span></div>
-          <div><kbd>T</kbd><span>正午 / 日落 / 午夜 / 日出</span></div>
+    <div class="panelTop"><span><span class="markCube">◇</span> 远野计划 / FIELD NOTES</span><span class="seed" id="seedLabel"></span></div>
+    <div class="heroGrid">
+      <section class="heroContent">
+        <div class="eyebrow">一个可以亲手改变的世界</div>
+        <div class="logo" id="title">远野</div>
+        <div class="sub" id="subtitle">一方世界，无限远方</div>
+        <p class="heroLead">从湖畔醒来，穿过树林与石门。沿着金色山径走向雪线之上，或在喜欢的地方建一座自己的家。</p>
+        <div id="loadbox"><div class="bar"><i id="barFill"></i></div><div id="loadText">正在生成世界…</div></div>
+        <button class="btn" id="primary" disabled>正在准备旅程…</button>
+        <div class="row" id="metaRow">
+          <button class="btn ghost" id="newWorld">生成新世界</button>
+          <button class="btn ghost" id="shadowBtn">阴影：开</button>
+          <button class="btn ghost" id="particleBtn">粒子：开</button>
         </div>
-      </div>
-      <div class="controlGroup">
-        <div class="controlHeading"><span>02</span> 建造与界面</div>
-        <div class="keyGrid">
-          <div><kbd>左键</kbd><span>挖掘方块 / 攻击生物</span></div>
-          <div><kbd>右键</kbd><span>放置 / 使用合成台</span></div>
-          <div><kbd>1–9</kbd><span>选择快捷栏</span></div>
-          <div><kbd>滚轮</kbd><span>切换快捷栏</span></div>
-          <div><kbd>E</kbd><span>背包与创造物品</span></div>
-          <div><kbd>Esc</kbd><span>暂停 / 关闭面板</span></div>
-        </div>
-      </div>
+      </section>
+      <aside class="heroAside" aria-label="旅途预览">
+        <div class="asideLabel">世界探索 / 05 地标</div>
+        <div class="asideMap"><span class="mapLake">◯</span><span class="mapRoute"></span><span class="mapPin p1">01<br>湖</span><span class="mapPin p2">02<br>门</span><span class="mapPin p3">03<br>山</span><span class="mapPin p4">04<br>峰</span></div>
+        <div class="asideQuote">“地图上的空白，<br>等你亲自填上。”</div>
+        <div class="asideTags"><span>雪山</span><span>湖泊</span><span>森林</span><span>建造</span></div>
+      </aside>
     </div>
-    <div class="foot">一个连续世界包含全部已实现的地形 · 无限探索 · 自动存档</div>
+    <div class="panelFoot"><span>自动保存 · 离开后从原地继续</span><details class="controlsDisclosure"><summary>操作指南 ↗</summary><div class="controls"><span><kbd>WASD</kbd> 移动 · 鼠标环顾</span><span><kbd>左键</kbd> 挖掘或攻击 · <kbd>右键</kbd> 放置</span><span><kbd>E</kbd> 背包 · <kbd>J</kbd> 手册 · <kbd>M</kbd> 地图</span><span><kbd>F</kbd> 飞行 · <kbd>T</kbd> 时段 · <kbd>F3</kbd> 调试</span><span><kbd>Esc</kbd> 暂停 · 数字键切换快捷栏</span></div></details></div>
   </div>
 </div>
 
@@ -555,22 +534,33 @@
   </div>
 </div>
 
+<div id="journal" class="hide" role="dialog" aria-label="探索手册">
+  <div class="journalPanel">
+    <div class="journalTop"><span>FIELD NOTES / 世界手册</span><button class="journalClose" id="journalClose" type="button">关闭 ×</button></div>
+    <div class="journalHeading"><div><span class="eyebrow">追寻远方</span><h2>五处值得抵达的地方。</h2><p>沿着湖岸、古迹与雪山，记录属于你的路线。选择任意地标即可在罗盘上追踪。</p></div><strong id="journalProgress">0 / 5 处已发现</strong></div>
+    <div id="journalGrid" class="journeyGrid"></div>
+    <div class="journalFoot"><span>靠近地标时会自动记入手册</span><span><kbd>J</kbd> 或 <kbd>Esc</kbd> 返回游戏</span></div>
+  </div>
+</div>
+
 <div id="minebar"><i id="minefill"></i></div>
 
 <div id="err"></div>
 
 <script src="js/noise.js?v=58"></script>
-<script src="js/blocks.js?v=59"></script>
-<script src="js/world.js?v=59"></script>
+<script src="js/blocks.js?v=62"></script>
+<script src="js/world.js?v=62"></script>
 <script src="js/mesher.js?v=59"></script>
-<script src="js/renderer.js?v=59"></script>
+<script src="js/renderer.js?v=62"></script>
+<script src="js/horizon.js?v=1"></script>
 <script src="js/particles.js?v=59"></script>
 <script src="js/viewmodel.js?v=58"></script>
-<script src="js/player.js?v=58"></script>
+<script src="js/player.js?v=62"></script>
 <script src="js/items.js?v=59"></script>
 <script src="js/crafting.js?v=59"></script>
 <script src="js/mobs.js?v=58"></script>
-<script src="js/minimap.js?v=59"></script>
-<script src="js/main.js?v=59"></script>
+<script src="js/minimap.js?v=62"></script>
+<script src="js/expedition.js?v=1"></script>
+<script src="js/main.js?v=62"></script>
 </body>
 </html>

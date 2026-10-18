@@ -168,6 +168,24 @@
         ctx.textBaseline = 'middle';
         ctx.fillText(String(i + 1), mx, my + 0.5);
       }
+      if ((this.ready || this.previewReady) && this.world.landmarks) {
+        for (const mark of this.world.landmarks) {
+          if (mark.id.startsWith('peak')) continue;
+          const pos = this.project(mark.x, mark.z);
+          const mx = Math.max(8, Math.min(SIZE - 8, pos[0]));
+          const my = Math.max(8, Math.min(SIZE - 8, pos[1]));
+          ctx.fillStyle = '#244d3d';
+          ctx.fillRect(mx - 6, my - 6, 12, 12);
+          ctx.strokeStyle = '#efd399';
+          ctx.lineWidth = 1.5;
+          ctx.strokeRect(mx - 6, my - 6, 12, 12);
+          ctx.fillStyle = '#fff7df';
+          ctx.font = 'bold 10px sans-serif';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText(mark.icon, mx, my + 0.5);
+        }
+      }
 
       if (this.ready || this.previewReady) {
         const pos = this.project(player.pos[0], player.pos[2]);

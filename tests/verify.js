@@ -181,7 +181,7 @@ inventory.wearHeldTool();
 assert.equal(state.hotbar[0], null);
 assert(messages.at(-1).includes('损坏'));
 let savedJson = '';
-const saveFactory = new Function('world', 'state', 'localStorage', `
+const saveFactory = new Function('world', 'state', 'localStorage', 'player', `
   const SAVE_KEY = 'mcweb.save.v1'; let dirtySave = true, lastTimeSave = 0;
   const toast = () => {};
   ${between('  function saveWorld', '  setInterval(saveWorld')}
@@ -192,9 +192,21 @@ const save = saveFactory({ saveData: () => ({ seed: 2024, edits: [] }) }, {
   time: 1, summitEggs: []
 }, { setItem: (key, value) => {
   assert.equal(key, 'mcweb.save.v1'); savedJson = value;
-} });
+} }, { pos: [222.5, 91, 217.5], yaw: 1.2, pitch: -0.3, flying: true });
 save(true);
 assert.equal(JSON.parse(savedJson).inv[0][2], 17);
+assert.deepEqual(JSON.parse(savedJson).player.pos, [222.5, 91, 217.5]);
+const restoreFactory = new Function('MC', 'world', 'saved', 'seed', `
+  ${between('  const player = new MC.Player(world);', '  const mobManager')}
+  return player;
+`);
+const playerStub = { Player: class {
+  constructor() { this.pos = [0, 65, 0]; this.yaw = 0; this.pitch = 0; this.flying = false; }
+} };
+const restoredPlayer = restoreFactory(playerStub, {}, JSON.parse(savedJson), 2024);
+assert.deepEqual(restoredPlayer.pos, [222.5, 91, 217.5]);
+assert.equal(restoredPlayer.flying, true);
+assert.deepEqual(restoreFactory(playerStub, {}, { seed: 2024, edits: [] }, 2024).pos, [0, 65, 0]);
 
 // 粒子池封顶，碰到地形消失；多个粒子只提交一个绘制调用。
 const pool = Object.create(MC.Particles.prototype);
@@ -231,4 +243,4 @@ minimap.startBuild({ pos: [0, 60, 0] });
 assert.equal(minimap.previewReady, true);
 assert.equal(minimap.ready, false);
 
-console.log('PASS: 火把/遮光/跨区块/读档、配方/耐久、动物网格、粒子池与单次绘制、小地图预览');
+console.log('PASS: 火把/遮光/跨区块/读档与位置恢复、配方/耐久、动物网格、粒子池与单次绘制、小地图预览');

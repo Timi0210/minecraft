@@ -25,10 +25,10 @@
   let saved = null;
   try { saved = JSON.parse(localStorage.getItem(SAVE_KEY) || 'null'); } catch (e) { saved = null; }
   if (!saved || !Array.isArray(saved.edits)) saved = null;
-  if (saved && saved.terrainVersion !== 3 && saved.edits.length) {
+  if (saved && saved.terrainVersion !== 4 && saved.edits.length) {
     // Terrain changes under old builds; keep a restorable copy before migration.
     try {
-      const backupKey = SAVE_KEY + '.before-terrain-v3';
+      const backupKey = SAVE_KEY + '.before-terrain-v4';
       if (!localStorage.getItem(backupKey)) localStorage.setItem(backupKey, JSON.stringify(saved));
     } catch (e) { /* storage may be unavailable */ }
   }
@@ -64,6 +64,17 @@
 
   const world = new MC.World(seed, saved && saved.seed === seed ? saved.edits : null);
   const player = new MC.Player(world);
+  if (saved && saved.seed === seed && saved.player && Array.isArray(saved.player.pos)) {
+    const p = saved.player.pos;
+    // 旧档没有 player 字段；损坏坐标也不应阻止进入世界。
+    if (p.length === 3 && p.every(Number.isFinite) &&
+        Math.abs(p[0]) < 1000000 && p[1] >= -10 && p[1] < 256 && Math.abs(p[2]) < 1000000) {
+      player.pos[0] = p[0]; player.pos[1] = p[1]; player.pos[2] = p[2];
+      if (Number.isFinite(saved.player.yaw)) player.yaw = saved.player.yaw;
+      if (Number.isFinite(saved.player.pitch)) player.pitch = Math.max(-1.54, Math.min(1.54, saved.player.pitch));
+      player.flying = !!saved.player.flying;
+    }
+  }
   const mobManager = new MC.MobManager(world);
   player.mobs = mobManager.mobs;
 
@@ -79,9 +90,10 @@
   }
   const minimap = new MC.Minimap(world, $('miniMapWrap'), $('miniMap'), $('miniNearest'));
   const particles = new MC.Particles(renderer);
+  const horizon = new MC.Horizon(world, renderer);
 
   /* ================= 状态 ================= */
-  const RENDER_R = 7;
+  const RENDER_R = 8;
   const state = {
     mode: 'loading',            // loading | menu | playing | paused | inventory
     selected: 0,
@@ -102,6 +114,10 @@
     time: saved && saved.seed === seed && Number.isFinite(saved.time) && saved.time >= 0 ? saved.time : 0,
     summitEggs: saved && saved.seed === seed && Array.isArray(saved.summitEggs) ?
       world.peaks.map((_, i) => !!saved.summitEggs[i]) : world.peaks.map(() => false),
+    discovered: saved && saved.seed === seed && Array.isArray(saved.discovered) ?
+      saved.discovered.filter(id => typeof id === 'string') : [],
+    tracked: saved && saved.seed === seed && typeof saved.tracked === 'string' ? saved.tracked : 'arch',
+    debug: false,
     summitFullWarnAt: -10,
     wasInWater: false
   };
@@ -109,6 +125,8 @@
     if (Array.isArray(saved.hotbar)) state.hotbar = parseStacks(saved.hotbar, 9);
     if (Array.isArray(saved.inv)) state.bag = parseStacks(saved.inv, 27);
   }
+  const expedition = new MC.Expedition(world, state, () => { dirtySave = true; },
+    point => toast('发现地标 · ' + point.name));
 
   const keys = Object.create(null);
   const input = { forward: false, back: false, left: false, right: false, jump: false, descend: false, sprint: false };
@@ -387,22 +405,22 @@
 
   function showMenu() {
     overlay.classList.remove('hide');
-    titleEl.textContent = 'MINECRAFT';
+    titleEl.textContent = '远野';
     titleEl.classList.remove('small');
-    subtitleEl.textContent = 'Web Edition · 手写 WebGL 体素引擎';
+    subtitleEl.textContent = '一方世界，无限远方';
     loadbox.style.display = 'none';
-    primary.textContent = '开始游戏';
+    primary.textContent = '进入世界 ↗';
     primary.disabled = false;
     seedLabel.textContent = '种子 ' + seed;
   }
 
   function showPause() {
     overlay.classList.remove('hide');
-    titleEl.textContent = '已暂停';
+    titleEl.textContent = '旅途暂停';
     titleEl.classList.add('small');
     subtitleEl.textContent = '世界会自动保存在本地';
     loadbox.style.display = 'none';
-    primary.textContent = '继续游戏';
+    primary.textContent = '继续探索 ↗';
     primary.disabled = false;
     seedLabel.textContent = '种子 ' + seed;
   }
@@ -413,6 +431,8 @@
     hudEl.classList.add('show');
     hintEl.classList.add('show');
     hotbarEl.classList.add('show');
+    $('compass').classList.add('show');
+    $('objective').classList.add('show');
   }
 
   /* ================= 快捷栏 ================= */
@@ -947,7 +967,7 @@
       cam.y += 17;
       cam.pitch = -0.34;
     }
-    cam.fogFar = RENDER_R * 16 + 8;
+    cam.fogFar = 440;
     const under = MC.Block.isLiquid(world.getBlock(Math.floor(cam.x), Math.floor(cam.y), Math.floor(cam.z)));
     if (under !== cam.underwater) {
       cam.underwater = under;
@@ -1164,6 +1184,7 @@
     if (e.code === 'Escape') {
       if (state.mode === 'inventory') closeInventory(true);
       else if (state.mode === 'crafting') closeCrafting(true);
+      else if (state.mode === 'journal') closeJournal(true);
       else if (state.mode === 'playing') {
         pauseGame();
         if (document.pointerLockElement) document.exitPointerLock();
@@ -1171,6 +1192,9 @@
       return;
     }
     if (e.repeat) return;
+    if (e.code === 'KeyJ' && state.mode === 'journal') {
+      e.preventDefault(); closeJournal(true); return;
+    }
     if (e.code === 'KeyE' && (state.mode === 'inventory' || state.mode === 'crafting')) {
       e.preventDefault();
       if (state.mode === 'inventory') closeInventory(true);
@@ -1182,6 +1206,16 @@
     if (e.code === 'KeyE') {
       e.preventDefault();
       openInventory();
+    } else if (e.code === 'KeyJ') {
+      e.preventDefault();
+      state.mode = 'journal';
+      state.mouseDown[0] = state.mouseDown[1] = false;
+      expedition.open();
+      if (document.pointerLockElement) document.exitPointerLock();
+    } else if (e.code === 'F3') {
+      e.preventDefault();
+      state.debug = !state.debug;
+      $('debugStats').classList.toggle('show', state.debug);
     } else if (e.code === 'KeyF') {
       const f = player.toggleFly();
       toast(f ? '飞行模式 开' : '飞行模式 关');
@@ -1300,11 +1334,19 @@
     saveWorld();
   }
 
+  function closeJournal(relock) {
+    if (state.mode !== 'journal') return;
+    expedition.close();
+    state.mode = 'playing';
+    if (relock) requestLock();
+  }
+
   invClose.addEventListener('click', () => closeInventory(true));
   craftClose.addEventListener('click', () => closeCrafting(true));
   tabBag.addEventListener('click', () => { state.invTab = 'bag'; renderInv(); });
   tabCreative.addEventListener('click', () => { state.invTab = 'creative'; renderInv(); });
   craftResultEl.addEventListener('click', takeCraft);
+  $('journalClose').addEventListener('click', () => closeJournal(true));
 
   primary.addEventListener('click', () => {
     if (primary.disabled) return;
@@ -1325,11 +1367,16 @@
     if (!force && !dirtySave && state.time - lastTimeSave < 30) return;
     try {
       const data = world.saveData();
-      data.terrainVersion = 3;
+      data.terrainVersion = 4;
       data.inv = state.bag.map(s => (s ? (s.maxDur ? [s.id, s.count, s.dur, s.maxDur] : [s.id, s.count]) : 0));
       data.hotbar = state.hotbar.map(s => (s ? (s.maxDur ? [s.id, s.count, s.dur, s.maxDur] : [s.id, s.count]) : 0));
       data.time = state.time;
       data.summitEggs = state.summitEggs;
+      data.discovered = state.discovered;
+      data.tracked = state.tracked;
+      data.player = {
+        pos: player.pos.slice(), yaw: player.yaw, pitch: player.pitch, flying: player.flying
+      };
       localStorage.setItem(SAVE_KEY, JSON.stringify(data));
       dirtySave = false;
       lastTimeSave = state.time;
@@ -1339,6 +1386,10 @@
   }
   setInterval(saveWorld, 6000);
   window.addEventListener('beforeunload', () => saveWorld(true));
+  window.addEventListener('pagehide', () => saveWorld(true));
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden && state.mode !== 'loading') saveWorld(true);
+  });
 
   /* ================= HUD ================= */
   const hPos = $('hPos'), hFps = $('hFps'), hChunks = $('hChunks'), hTris = $('hTris'), hMode = $('hMode');
@@ -1359,7 +1410,8 @@
     const modeName = player.flying ? '飞行' : (player.inWater ? '游泳中' : (player.sprinting ? '疾跑' : '步行'));
     const minute = Math.floor((12 + state.time / MC.DAY_LENGTH * 24) % 24 * 60);
     const clock = String(Math.floor(minute / 60)).padStart(2, '0') + ':' + String(minute % 60).padStart(2, '0');
-    hMode.textContent = modeName + ' · ' + (MC.BIOME_NAMES[biome] || '') + ' · ' + clock;
+    hMode.textContent = MC.BIOME_NAMES[biome] || '远野';
+    $('hActivity').textContent = modeName + ' · ' + clock;
   }
 
   /* ================= 预加载 ================= */
@@ -1502,6 +1554,7 @@
     stream(dt);
     particles.update(dt, world);
     updateCamera(dt);
+    horizon.update(player.pos[0], player.pos[2]);
 
     const showHit = state.mode === 'playing' || state.mode === 'inventory' || state.mode === 'crafting';
     const blockHit = showHit ? targetInfo() : null;
@@ -1521,6 +1574,7 @@
 
     updateHud(dt);
     if (state.mode === 'playing') minimap.update(player, dt);
+    if (state.mode === 'playing') expedition.update(player);
     if (state.mode === 'playing') saveWorld();
   }
 
@@ -1545,5 +1599,5 @@
     particleBtn.textContent = '粒子：' + (particles.enabled ? '开' : '关');
   });
 
-  window.__mc = { world, player, renderer, cam, state, seed, mobManager, sfx, particles, worldRef: world };
+  window.__mc = { world, player, renderer, cam, state, seed, mobManager, sfx, particles, horizon, expedition, worldRef: world };
 })();

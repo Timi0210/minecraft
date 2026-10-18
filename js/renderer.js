@@ -20,7 +20,7 @@
     const light = height >= 0 ? sun : sun.map(v => -v);
     const moon = smooth(0.0, 0.35, -height);
     const highSun = smooth(0.0, 0.55, height);
-    const ambient = mix3([0.24, 0.29, 0.40], [0.62, 0.66, 0.71], day);
+    const ambient = mix3([0.24, 0.29, 0.40], [0.70, 0.69, 0.65], day);
     const direct = mix3([0.22 * moon, 0.24 * moon, 0.32 * moon],
       [0.42, 0.40, 0.36], day * (0.35 + 0.65 * highSun));
     const warm = twilight * day;
@@ -28,8 +28,8 @@
     direct[1] -= warm * 0.11;
     direct[2] -= warm * 0.18;
     for (let i = 0; i < 3; i++) direct[i] = Math.max(0, direct[i]);
-    const zenith = mix3([0.015, 0.025, 0.075], [0.47, 0.64, 0.95], day);
-    const horizon = mix3([0.045, 0.075, 0.15], [0.59, 0.75, 0.98], day);
+    const zenith = mix3([0.015, 0.025, 0.075], [0.46, 0.64, 0.85], day);
+    const horizon = mix3([0.045, 0.075, 0.15], [0.68, 0.78, 0.86], day);
     horizon[0] += twilight * 0.27;
     horizon[1] += twilight * 0.075;
     horizon[2] -= twilight * 0.07;
@@ -222,6 +222,8 @@ uniform vec3 uDirect;
 uniform float uHitFlash;
 uniform float uFlicker;
 uniform float uMobLight;
+uniform float uFarPass;
+uniform highp vec3 uCamPos;
 out vec4 fragColor;
 
 float shadowAt(vec3 wp, vec3 n) {
@@ -241,14 +243,28 @@ float shadowAt(vec3 wp, vec3 n) {
 }
 
 void main() {
+  if (uFarPass > 0.5 && length(vWorld.xz - uCamPos.xz) < 96.0) discard;
   vec4 c = texture(uTex, vUV);
   if (c.a < 0.02) discard;
   vec3 normal = normalize(vNormal);
-  float sh = shadowAt(vWorld, normal);
+  float sh = uFarPass > 0.5 ? 1.0 : shadowAt(vWorld, normal);
   float diffuse = 0.44 + 0.56 * max(dot(normal, uLightDir), 0.0);
   vec3 sun = uAmbient + uDirect * diffuse * mix(0.12, 1.0, sh);
   vec3 torch = vec3(1.14, 0.79, 0.44) * max(vBlockLight, uMobLight) * uFlicker;
-  vec3 col = c.rgb * vLight * max(sun, torch);
+  vec3 surface = c.rgb;
+  if (uFarPass > 0.5) {
+    if (vBlockLight < -2.5) surface = vec3(0.65, 0.38, 0.27);
+    else if (vBlockLight < -1.5) surface = vec3(0.83, 0.76, 0.53);
+    else if (vBlockLight < -0.5) surface = vec3(0.35, 0.62, 0.75);
+    else if (vWorld.y > 31.0) {
+      float steep = smoothstep(0.10, 0.47, 1.0 - normal.y);
+      float rock = clamp(steep * 0.30 + smoothstep(48.0, 72.0, vWorld.y) * 0.86, 0.0, 1.0);
+      surface = mix(vec3(0.43, 0.62, 0.35), vec3(0.58, 0.64, 0.67), rock);
+      float snow = smoothstep(69.0, 92.0, vWorld.y) * (1.0 - steep * 0.20);
+      surface = mix(surface, vec3(0.92, 0.95, 0.96), snow * 0.88);
+    }
+  }
+  vec3 col = surface * vLight * max(sun, torch);
   float f = smoothstep(uFogNear, uFogFar, vDist);
   col = mix(col, uFogColor, f);
   col = mix(col, vec3(1.0, 0.18, 0.18), uHitFlash * 0.72);
@@ -465,7 +481,7 @@ void main() { fragColor = vColor; }`;
       this.progShadow = makeProgram(gl, VS_SHADOW, FS_SHADOW);
       this.uShadowProg = this.uniforms(this.progShadow, ['uLightVP', 'uModel', 'uTex']);
 
-      this.uMain = this.uniforms(this.progMain, ['uVP', 'uModel', 'uCamPos', 'uTex', 'uFogColor', 'uFogNear', 'uFogFar', 'uAlpha', 'uShadowVP', 'uShadowMap', 'uShadowTexel', 'uShadowOn', 'uLightDir', 'uAmbient', 'uDirect', 'uHitFlash', 'uFlicker', 'uMobLight']);
+      this.uMain = this.uniforms(this.progMain, ['uVP', 'uModel', 'uCamPos', 'uTex', 'uFogColor', 'uFogNear', 'uFogFar', 'uAlpha', 'uShadowVP', 'uShadowMap', 'uShadowTexel', 'uShadowOn', 'uLightDir', 'uAmbient', 'uDirect', 'uHitFlash', 'uFlicker', 'uMobLight', 'uFarPass']);
       this.uSky = this.uniforms(this.progSky, ['uInvVP', 'uCam', 'uTime', 'uCloudY', 'uSunDir', 'uZenith', 'uHorizon', 'uDay', 'uTwilight']);
       this.uMist = this.uniforms(this.progMist, ['uVP', 'uCenter', 'uRight', 'uRadius', 'uHeight', 'uVertical', 'uTime', 'uDay', 'uTwilight', 'uStrength']);
       this.uLine = this.uniforms(this.progLine, ['uVP', 'uOffset', 'uScale', 'uColor']);
@@ -787,7 +803,7 @@ void main() { fragColor = vColor; }`;
       gl.viewport(0, 0, W, H);
 
       const aspect = W / H;
-      M4.perspective(this.proj, (cam.fov || 65) * Math.PI / 180, aspect, 0.08, 400);
+      M4.perspective(this.proj, (cam.fov || 65) * Math.PI / 180, aspect, 0.08, 570);
       viewMatrix(this.view, cam);
       M4.mul(this.vp, this.proj, this.view);
       M4.invert(this.invVP, this.vp);
@@ -798,7 +814,7 @@ void main() { fragColor = vColor; }`;
       const light = lightingAt(time);
       const fogCol = under ? UNDERWATER_FOG : light.horizon;
       const fogFar = under ? 20 : (cam.fogFar || 130);
-      this.fogNear = under ? 0.8 : fogFar * 0.70;
+      this.fogNear = under ? 0.8 : fogFar * 0.36;
       this.fogFar = fogFar;
 
       const shadowActive = this.shadowEnabled && light.shadow && !under;
@@ -843,6 +859,7 @@ void main() { fragColor = vColor; }`;
       gl.uniform1f(u.uHitFlash, 0);
       gl.uniform1f(u.uFlicker, 0.97 + 0.03 * Math.sin(time * 19.7));
       gl.uniform1f(u.uMobLight, 0);
+      gl.uniform1f(u.uFarPass, 0);
       gl.uniform3fv(u.uLightDir, light.light);
       gl.uniform3fv(u.uAmbient, under ? [0.29, 0.47, 0.60] : light.ambient);
       gl.uniform3fv(u.uDirect, under ? [0.08, 0.11, 0.14] : light.direct);
@@ -860,6 +877,15 @@ void main() { fragColor = vColor; }`;
 
       let faces = 0, drawn = 0;
       const transparent = [];
+      if (!under && this.horizonMesh) {
+        gl.uniform1f(u.uFarPass, 1);
+        gl.uniform1f(u.uShadowOn, 0);
+        gl.bindVertexArray(this.horizonMesh.vao);
+        gl.drawElements(gl.TRIANGLES, this.horizonMesh.count, gl.UNSIGNED_INT, 0);
+        gl.uniform1f(u.uFarPass, 0);
+        gl.uniform1f(u.uShadowOn, shadowActive ? 1 : 0);
+        drawn++;
+      }
       for (let i = 0; i < chunks.length; i++) {
         const c = chunks[i];
         if (!c.gpu) continue;
