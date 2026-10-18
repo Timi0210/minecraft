@@ -8,15 +8,17 @@ const root = path.resolve(__dirname, '..');
 const canvas = () => ({
   getContext: () => ({
     createImageData: (w, h) => ({ data: new Uint8ClampedArray(w * h * 4) }),
-    putImageData: () => {}
+    putImageData: () => {},
+    fillRect: () => {},
+    clearRect: () => {}
   })
 });
 const context = vm.createContext({
-  console, Math, Uint8Array, Uint32Array, Uint8ClampedArray, Float32Array,
+  console, performance, Math, Uint8Array, Uint32Array, Uint8ClampedArray, Float32Array,
   Int16Array, Map, Set, Array, window: {}, document: { createElement: canvas }
 });
 for (const file of ['noise', 'blocks', 'world', 'mesher', 'renderer',
-  'items', 'crafting', 'particles', 'minimap']) {
+  'items', 'crafting', 'particles', 'minimap', 'settings', 'horizon']) {
   const source = fs.readFileSync(path.join(root, 'js', file + '.js'), 'utf8');
   vm.runInContext(source, context, { filename: file + '.js' });
 }
@@ -43,10 +45,17 @@ function lightWorld(minX, maxX, minZ, maxZ) {
   return world;
 }
 
-assert.equal(MC.BLOCKS.length, 40);
-assert.equal(MC.ALL_ITEMS.length, 80);
+assert.equal(MC.BLOCKS.length, 44);
+assert.equal(MC.ALL_ITEMS.length, 86);
 assert.equal(MC.RECIPES.length, 36);
 assert.equal(MC.BLOCKS[MC.Block.TORCH].light, 14);
+assert.equal(MC.BLOCKS[MC.Block.TABLET].name, '石碑');
+assert.equal(MC.BLOCKS[MC.Block.STONE_SWORD].name, '石中剑');
+assert.equal(MC.BLOCKS[MC.Block.GLITCH].name, '丢失的贴图');
+assert.equal(MC.MINE[MC.Block.TABLET].hard, -1);
+assert.equal(MC.MINE[MC.Block.STONE_SWORD].hard, -1);
+assert(MC.SECRET_ITEMS.has(MC.ITEM_KEY.broken_steel));
+assert(MC.SECRET_ITEMS.has(MC.ITEM_KEY.moon_wool));
 assert.equal(MC.itemTool(120).maxDur, 59);
 assert.equal(MC.itemTool(140).maxDur, 1561);
 const torchRecipe = MC.RECIPES.find(r => r.out.id === MC.Block.TORCH);
@@ -189,13 +198,15 @@ const saveFactory = new Function('world', 'state', 'localStorage', 'player', `
 `);
 const save = saveFactory({ saveData: () => ({ seed: 2024, edits: [] }) }, {
   bag: [inventory.stack(120, 1, 17)], hotbar: [inventory.stack(1, 3)],
-  time: 1, summitEggs: []
+  time: 1, seen: { origin: true }, flags: { swordPulled: true }, explored: [[1, 2]]
 }, { setItem: (key, value) => {
   assert.equal(key, 'mcweb.save.v1'); savedJson = value;
 } }, { pos: [222.5, 91, 217.5], yaw: 1.2, pitch: -0.3, flying: true });
 save(true);
 assert.equal(JSON.parse(savedJson).inv[0][2], 17);
 assert.deepEqual(JSON.parse(savedJson).player.pos, [222.5, 91, 217.5]);
+assert.equal(JSON.parse(savedJson).secrets.origin, true);
+assert.deepEqual(JSON.parse(savedJson).explored, [[1, 2]]);
 const restoreFactory = new Function('MC', 'world', 'saved', 'seed', `
   ${between('  const player = new MC.Player(world);', '  const mobManager')}
   return player;
@@ -243,4 +254,58 @@ minimap.startBuild({ pos: [0, 60, 0] });
 assert.equal(minimap.previewReady, true);
 assert.equal(minimap.ready, false);
 
-console.log('PASS: 火把/遮光/跨区块/读档与位置恢复、配方/耐久、动物网格、粒子池与单次绘制、小地图预览');
+// 开放世界站点：每个种子都有可发现的注脚，说明石碑覆盖多种群系。
+const open = new MC.World(2024);
+assert.equal(open.sites.filter(s => s.type === 'tablet').length, 9);
+assert.equal(open.sites.filter(s => s.type === 'origin').length, 1);
+assert(open.sites.some(s => s.type === 'cabin'));
+assert(open.sites.some(s => s.type === 'giant'));
+assert(open.sites.some(s => s.type === 'guardian'));
+open.ensureChunk(0, 0);
+assert.equal(open.getBlock(0, open.sites.find(s => s.type === 'origin').y + 1, 0), MC.Block.TABLET);
+assert(open.lore.size >= 1);
+
+console.log('PASS: 火把/遮光/跨区块/读档与位置恢复、配方/耐久、动物网格、粒子池与单次绘制、小地图预览、开放世界站点');
+
+// 偏好不会污染世界存档，损坏字段与不可用存储均可降级。
+const preferences = new Map([['mcweb.save.v1', 'untouched']]);
+const storage = { getItem: k => preferences.get(k), setItem: (k, v) => preferences.set(k, v) };
+const settings = new MC.Settings(storage);
+settings.set('distance', 10);
+settings.set('fov', 120);
+settings.set('shadows', false);
+assert.equal(new MC.Settings(storage).values.distance, 10);
+assert.equal(new MC.Settings(storage).values.fov, 95);
+assert.equal(new MC.Settings(storage).values.shadows, false);
+assert.equal(preferences.get('mcweb.save.v1'), 'untouched');
+assert.equal(new MC.Settings(null).values.distance, 8);
+preferences.set('mcweb.settings.v1', '{broken');
+assert.equal(new MC.Settings(storage).values.fov, 65);
+
+// 远景必须完成采样和网格后再交换；刷新时旧网格可继续绘制。
+let uploads = 0, disposed = 0;
+const horizon = new MC.Horizon({
+  biomeField: () => ({}), heightAt: (x, z) => 50 + x * 0.01 + z * 0.01,
+  biomeAt: () => 'plains'
+}, {
+  makeMesh(data) {
+    uploads++;
+    assert(data.verts.every(Number.isFinite));
+    for (const index of data.idx) assert(index < data.verts.length / 10);
+    return { count: data.idx.length };
+  },
+  disposeMesh(mesh) { if (mesh) disposed++; }
+});
+horizon.begin(0, 0);
+for (let i = 0; i < 1000 && horizon.phase !== 'idle'; i++) horizon.update(0, 0);
+assert.equal(horizon.phase, 'idle');
+assert.equal(uploads, 1);
+const oldMesh = horizon.mesh;
+horizon.begin(-65, -65);
+horizon.update(-65, -65);
+assert.equal(horizon.mesh, oldMesh);
+for (let i = 0; i < 1000 && horizon.phase !== 'idle'; i++) horizon.update(-65, -65);
+assert.equal(uploads, 2);
+assert.equal(disposed, 1);
+assert.equal(horizon.originX, -576);
+console.log('PASS: 画面偏好容错/持久化、远景分帧构建/缓冲范围/旧网格替换');

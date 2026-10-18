@@ -188,6 +188,7 @@ out float vDist;
 out vec3 vWorld;
 out vec3 vNormal;
 out float vBlockLight;
+flat out float vFarMaterial;
 void main() {
   vec4 wp = uModel * vec4(aPos, 1.0);
   gl_Position = uVP * wp;
@@ -197,6 +198,7 @@ void main() {
   vWorld = wp.xyz;
   vNormal = mat3(uModel) * aNormal;
   vBlockLight = aBlockLight;
+  vFarMaterial = aBlockLight;
 }`;
 
   const FS_MAIN = `#version 300 es
@@ -207,6 +209,7 @@ in float vDist;
 in vec3 vWorld;
 in vec3 vNormal;
 in float vBlockLight;
+flat in float vFarMaterial;
 uniform sampler2D uTex;
 uniform vec3 uFogColor;
 uniform float uFogNear;
@@ -222,7 +225,12 @@ uniform vec3 uDirect;
 uniform float uHitFlash;
 uniform float uFlicker;
 uniform float uMobLight;
+uniform float uGlow;
 uniform float uFarPass;
+uniform sampler2D uNearMask;
+uniform highp vec2 uNearOrigin;
+uniform vec3 uFarTiles;
+uniform float uAtlasGrid;
 uniform highp vec3 uCamPos;
 out vec4 fragColor;
 
@@ -242,9 +250,19 @@ float shadowAt(vec3 wp, vec3 n) {
   return lit / 9.0;
 }
 
+vec3 farTexture(float tile, vec2 p) {
+  vec2 origin = vec2(mod(tile, uAtlasGrid), floor(tile / uAtlasGrid));
+  return texture(uTex, (origin + 0.03125 + fract(p * 0.125) * 0.9375) / uAtlasGrid).rgb;
+}
+
 void main() {
-  if (uFarPass > 0.5 && length(vWorld.xz - uCamPos.xz) < 96.0) discard;
-  vec4 c = texture(uTex, vUV);
+  // 已绘制的真实区块接管对应区域，远山不覆盖建筑、水面和挖出的洞穴。
+  if (uFarPass > 0.5) {
+    vec2 cell = floor(vWorld.xz / 16.0) - uNearOrigin;
+    if (all(greaterThanEqual(cell, vec2(0.0))) && all(lessThan(cell, vec2(32.0))) &&
+        texelFetch(uNearMask, ivec2(cell), 0).r > 0.5) discard;
+  }
+  vec4 c = uFarPass > 0.5 ? vec4(1.0) : texture(uTex, vUV);
   if (c.a < 0.02) discard;
   vec3 normal = normalize(vNormal);
   float sh = uFarPass > 0.5 ? 1.0 : shadowAt(vWorld, normal);
@@ -253,21 +271,27 @@ void main() {
   vec3 torch = vec3(1.14, 0.79, 0.44) * max(vBlockLight, uMobLight) * uFlicker;
   vec3 surface = c.rgb;
   if (uFarPass > 0.5) {
-    if (vBlockLight < -2.5) surface = vec3(0.65, 0.38, 0.27);
-    else if (vBlockLight < -1.5) surface = vec3(0.83, 0.76, 0.53);
-    else if (vBlockLight < -0.5) surface = vec3(0.35, 0.62, 0.75);
+    if (vFarMaterial < -3.5) surface = vec3(0.92, 0.95, 0.96);
+    else if (vFarMaterial < -2.5) surface = vec3(0.65, 0.38, 0.27);
+    else if (vFarMaterial < -1.5) surface = vec3(0.83, 0.76, 0.53);
+    else if (vFarMaterial < -0.5) surface = vec3(0.35, 0.62, 0.75);
     else if (vWorld.y > 31.0) {
+      // 远景复用像素图集，以世界坐标贴图，移动时纹理不会跟着镜头滑动。
       float steep = smoothstep(0.10, 0.47, 1.0 - normal.y);
-      float rock = clamp(steep * 0.30 + smoothstep(48.0, 72.0, vWorld.y) * 0.86, 0.0, 1.0);
-      surface = mix(vec3(0.43, 0.62, 0.35), vec3(0.58, 0.64, 0.67), rock);
-      float snow = smoothstep(69.0, 92.0, vWorld.y) * (1.0 - steep * 0.20);
-      surface = mix(surface, vec3(0.92, 0.95, 0.96), snow * 0.88);
+      vec2 plane = vWorld.xz;
+      if (steep > 0.6) plane = abs(normal.x) > abs(normal.z) ? vWorld.zy : vWorld.xy;
+      float rock = max(steep, smoothstep(58.0, 70.0, vWorld.y));
+      surface = mix(farTexture(uFarTiles.x, plane), farTexture(uFarTiles.y, plane), rock);
+      float snowPatch = sin(floor(vWorld.x * 0.25) * 1.7 + floor(vWorld.z * 0.25) * 2.3);
+      float snow = smoothstep(77.0, 89.0, vWorld.y + snowPatch * 4.0) * (1.0 - steep * 0.65);
+      surface = mix(surface, farTexture(uFarTiles.z, plane), snow);
     }
   }
   vec3 col = surface * vLight * max(sun, torch);
   float f = smoothstep(uFogNear, uFogFar, vDist);
   col = mix(col, uFogColor, f);
   col = mix(col, vec3(1.0, 0.18, 0.18), uHitFlash * 0.72);
+  col = mix(col, vec3(0.72, 0.84, 1.0), uGlow * 0.42);
   fragColor = vec4(col, c.a * uAlpha);
 }`;
 
@@ -481,12 +505,22 @@ void main() { fragColor = vColor; }`;
       this.progShadow = makeProgram(gl, VS_SHADOW, FS_SHADOW);
       this.uShadowProg = this.uniforms(this.progShadow, ['uLightVP', 'uModel', 'uTex']);
 
-      this.uMain = this.uniforms(this.progMain, ['uVP', 'uModel', 'uCamPos', 'uTex', 'uFogColor', 'uFogNear', 'uFogFar', 'uAlpha', 'uShadowVP', 'uShadowMap', 'uShadowTexel', 'uShadowOn', 'uLightDir', 'uAmbient', 'uDirect', 'uHitFlash', 'uFlicker', 'uMobLight', 'uFarPass']);
+      this.uMain = this.uniforms(this.progMain, ['uVP', 'uModel', 'uCamPos', 'uTex', 'uFogColor', 'uFogNear', 'uFogFar', 'uAlpha', 'uShadowVP', 'uShadowMap', 'uShadowTexel', 'uShadowOn', 'uLightDir', 'uAmbient', 'uDirect', 'uHitFlash', 'uFlicker', 'uMobLight', 'uGlow', 'uFarPass', 'uNearMask', 'uNearOrigin', 'uFarTiles', 'uAtlasGrid']);
       this.uSky = this.uniforms(this.progSky, ['uInvVP', 'uCam', 'uTime', 'uCloudY', 'uSunDir', 'uZenith', 'uHorizon', 'uDay', 'uTwilight']);
       this.uMist = this.uniforms(this.progMist, ['uVP', 'uCenter', 'uRight', 'uRadius', 'uHeight', 'uVertical', 'uTime', 'uDay', 'uTwilight', 'uStrength']);
       this.uLine = this.uniforms(this.progLine, ['uVP', 'uOffset', 'uScale', 'uColor']);
 
       this.texture = this.makeTexture();
+      this.resolutionScale = 1;
+      this.nearMask = new Uint8Array(32 * 32);
+      this.previousNearMask = new Uint8Array(32 * 32);
+      this.nearMaskTexture = gl.createTexture();
+      gl.bindTexture(gl.TEXTURE_2D, this.nearMaskTexture);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.R8, 32, 32, 0, gl.RED, gl.UNSIGNED_BYTE, this.nearMask);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
 
       // 天空全屏四边形
       this.skyVAO = gl.createVertexArray();
@@ -575,9 +609,31 @@ void main() { fragColor = vColor; }`;
       return tex;
     }
 
+    updateNearMask(chunks, cam) {
+      const gl = this.gl;
+      const x = Math.floor(cam.x / 16) - 16, z = Math.floor(cam.z / 16) - 16;
+      this.nearMask.fill(0);
+      for (const chunk of chunks) {
+        const cx = chunk.cx - x, cz = chunk.cz - z;
+        if (chunk.gpu && cx >= 0 && cx < 32 && cz >= 0 && cz < 32)
+          this.nearMask[cz * 32 + cx] = 255;
+      }
+      gl.activeTexture(gl.TEXTURE2);
+      gl.bindTexture(gl.TEXTURE_2D, this.nearMaskTexture);
+      // 位图只有 1KB，内容发生变化时才上传。
+      for (let i = 0; i < this.nearMask.length; i++) if (this.nearMask[i] !== this.previousNearMask[i]) {
+        gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, 32, 32, gl.RED, gl.UNSIGNED_BYTE, this.nearMask);
+        this.previousNearMask.set(this.nearMask);
+        break;
+      }
+      gl.uniform1i(this.uMain.uNearMask, 2);
+      gl.uniform2f(this.uMain.uNearOrigin, x, z);
+      gl.activeTexture(gl.TEXTURE0);
+    }
+
     resize() {
       const c = this.canvas;
-      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+      const dpr = Math.min(window.devicePixelRatio || 1, 2) * this.resolutionScale;
       const w = Math.max(1, Math.floor(c.clientWidth * dpr));
       const h = Math.max(1, Math.floor(c.clientHeight * dpr));
       if (c.width !== w || c.height !== h) {
@@ -878,6 +934,10 @@ void main() { fragColor = vColor; }`;
       let faces = 0, drawn = 0;
       const transparent = [];
       if (!under && this.horizonMesh) {
+        this.updateNearMask(chunks, cam);
+        gl.uniform3f(u.uFarTiles, MC.BLOCKS[MC.Block.GRASS].tex.top,
+          MC.BLOCKS[MC.Block.STONE].tex.top, MC.BLOCKS[MC.Block.SNOW].tex.top);
+        gl.uniform1f(u.uAtlasGrid, MC.Atlas.grid);
         gl.uniform1f(u.uFarPass, 1);
         gl.uniform1f(u.uShadowOn, 0);
         gl.bindVertexArray(this.horizonMesh.vao);
@@ -909,6 +969,7 @@ void main() { fragColor = vColor; }`;
           const cube = this.getMobCube(b.tiles);
           if (!cube) continue;
           gl.uniform1f(u.uHitFlash, b.flash || 0);
+          gl.uniform1f(u.uGlow, b.glow || 0);
           gl.uniform1f(u.uMobLight, world.getLight(
             Math.floor(b.m[12]), Math.floor(b.m[13]), Math.floor(b.m[14])) / 14);
           gl.uniformMatrix4fv(u.uModel, false, b.m);
@@ -918,6 +979,7 @@ void main() { fragColor = vColor; }`;
         }
         gl.uniformMatrix4fv(u.uModel, false, this.identity);
         gl.uniform1f(u.uHitFlash, 0);
+        gl.uniform1f(u.uGlow, 0);
         gl.uniform1f(u.uMobLight, 0);
       }
 

@@ -88,12 +88,17 @@
     $('loadText').textContent = '请使用支持 WebGL2 的浏览器（Chrome / Edge / Safari 15+）';
     return;
   }
-  const minimap = new MC.Minimap(world, $('miniMapWrap'), $('miniMap'), $('miniNearest'));
   const particles = new MC.Particles(renderer);
   const horizon = new MC.Horizon(world, renderer);
 
   /* ================= 状态 ================= */
-  const RENDER_R = 8;
+  let storage = null;
+  try { storage = window.localStorage; } catch (_) { /* 隐私模式下仍可游玩。 */ }
+  const settings = new MC.Settings(storage);
+  let RENDER_R = settings.values.distance;
+  renderer.resolutionScale = settings.values.resolution;
+  renderer.shadowEnabled = settings.values.shadows;
+  particles.setEnabled(settings.values.particles);
   const state = {
     mode: 'loading',            // loading | menu | playing | paused | inventory
     selected: 0,
@@ -112,22 +117,22 @@
     fps: 0,
     auto: params.has('auto'),
     time: saved && saved.seed === seed && Number.isFinite(saved.time) && saved.time >= 0 ? saved.time : 0,
-    summitEggs: saved && saved.seed === seed && Array.isArray(saved.summitEggs) ?
-      world.peaks.map((_, i) => !!saved.summitEggs[i]) : world.peaks.map(() => false),
-    discovered: saved && saved.seed === seed && Array.isArray(saved.discovered) ?
-      saved.discovered.filter(id => typeof id === 'string') : [],
-    tracked: saved && saved.seed === seed && typeof saved.tracked === 'string' ? saved.tracked : 'arch',
+    seen: saved && saved.seed === seed && saved.secrets && typeof saved.secrets === 'object' ?
+      saved.secrets : {},
+    flags: saved && saved.seed === seed && saved.flags && typeof saved.flags === 'object' ?
+      saved.flags : {},
+    explored: saved && saved.seed === seed && Array.isArray(saved.explored) ?
+      saved.explored.filter(p => Array.isArray(p) && Number.isFinite(p[0]) && Number.isFinite(p[1]))
+        .slice(-640) : [],
     debug: false,
-    summitFullWarnAt: -10,
     wasInWater: false
   };
   if (saved && saved.seed === seed) {
     if (Array.isArray(saved.hotbar)) state.hotbar = parseStacks(saved.hotbar, 9);
     if (Array.isArray(saved.inv)) state.bag = parseStacks(saved.inv, 27);
   }
-  const expedition = new MC.Expedition(world, state, () => { dirtySave = true; },
-    point => toast('发现地标 · ' + point.name));
-
+  const minimap = new MC.Minimap(world, $('miniMapWrap'), $('miniMap'), state);
+  let secrets = null;
   const keys = Object.create(null);
   const input = { forward: false, back: false, left: false, right: false, jump: false, descend: false, sprint: false };
 
@@ -396,6 +401,12 @@
   const invHint = $('invHint');
   const mineBar = $('minebar');
   const mineFill = $('minefill');
+  const readEl = $('read');
+  const readTitleEl = $('readTitle');
+  const readTextEl = $('readText');
+  const auroraEl = $('aurora');
+  const meteorsEl = $('meteors');
+  const flashEl = $('flash');
   const heldItemEl = $('heldItem');
   const heldItemInner = $('heldItemInner');
   const heldItemCanvas = $('heldItemCanvas');
@@ -431,8 +442,6 @@
     hudEl.classList.add('show');
     hintEl.classList.add('show');
     hotbarEl.classList.add('show');
-    $('compass').classList.add('show');
-    $('objective').classList.add('show');
   }
 
   /* ================= 快捷栏 ================= */
@@ -580,6 +589,7 @@
   function renderCreative() {
     creativeGridEl.innerHTML = '';
     for (const it of MC.ALL_ITEMS) {
+      if (MC.SECRET_ITEMS && MC.SECRET_ITEMS.has(it.id)) continue;
       const count = it.kind === 'tool' ? 1 : MAX_STACK;
       const el = makeInvSlot(stack(it.id, count));
       el.title = it.name;
@@ -697,6 +707,8 @@
   function openInventory() {
     if (state.mode !== 'playing') return;
     state.mode = 'inventory';
+    for (const k in keys) keys[k] = false;
+    state.mouseDown[0] = state.mouseDown[1] = false;
     state.invTab = 'bag';
     renderInv();
     invEl.classList.remove('hide');
@@ -848,7 +860,7 @@
     }
     craftPaletteEl.innerHTML = '';
     for (const it of MC.ALL_ITEMS) {
-      if (it.kind === 'tool') continue;
+      if (it.kind === 'tool' || (MC.SECRET_ITEMS && MC.SECRET_ITEMS.has(it.id))) continue;
       const btn = document.createElement('button');
       btn.className = 'paletteBtn';
       btn.title = it.name;
@@ -863,6 +875,8 @@
   function openCrafting() {
     if (state.mode !== 'playing') return;
     state.mode = 'crafting';
+    for (const k in keys) keys[k] = false;
+    state.mouseDown[0] = state.mouseDown[1] = false;
     buildCraftUI();
     craftEl.classList.remove('hide');
     if (document.pointerLockElement === canvas) document.exitPointerLock();
@@ -893,9 +907,7 @@
     return a;
   }
 
-  const OFFSETS_GEN = makeOffsets(RENDER_R + 1);
-  const OFFSETS_MESH = makeOffsets(RENDER_R);
-  const OFFSETS_UNLOAD = makeOffsets(RENDER_R + 3);
+  let OFFSETS_GEN = makeOffsets(RENDER_R + 1);
 
   function buildChunkMesh(chunk) {
     const mesh = MC.meshChunk(world, chunk);
@@ -912,21 +924,16 @@
     }
   }
 
-  let streamDelay = 0;
-  function stream(dt, force) {
-    streamDelay -= dt;
-    if (!force && streamDelay > 0) return;
-    streamDelay = 0.05;
-
+  function stream() {
+    const deadline = performance.now() + 4;
     const pcx = Math.floor(player.pos[0] / 16);
     const pcz = Math.floor(player.pos[2] / 16);
-    let genBudget = 1, meshBudget = 3;
-
+    let genBudget = 1, meshBudget = 1;
+    // 单个区块仍是原子任务；每帧至多各做一次，超预算立即让出主线程。
     for (let i = 0; i < OFFSETS_GEN.length; i++) {
-      if (genBudget <= 0 && meshBudget <= 0) break;
-      const o = OFFSETS_GEN[i];
-      const cx = pcx + o.dx, cz = pcz + o.dz;
-      let c = world.getChunk(cx, cz);
+      if (performance.now() >= deadline || (genBudget <= 0 && meshBudget <= 0)) break;
+      const o = OFFSETS_GEN[i], cx = pcx + o.dx, cz = pcz + o.dz;
+      const c = world.getChunk(cx, cz);
       if (!c) {
         if (genBudget > 0) { world.ensureChunk(cx, cz); genBudget--; }
         continue;
@@ -940,12 +947,11 @@
   }
 
   function unloadFar() {
-    if (world.chunks.size < 400) return;
     const pcx = Math.floor(player.pos[0] / 16);
     const pcz = Math.floor(player.pos[2] / 16);
     const drop = [];
     for (const c of world.chunks.values()) {
-      if (Math.abs(c.cx - pcx) > RENDER_R + 4 || Math.abs(c.cz - pcz) > RENDER_R + 4) drop.push(c);
+      if (Math.abs(c.cx - pcx) > RENDER_R + 2 || Math.abs(c.cz - pcz) > RENDER_R + 2) drop.push(c);
     }
     for (const c of drop) {
       renderer.disposeChunk(c);
@@ -974,12 +980,14 @@
       underwaterEl.classList.toggle('show', under);
       sfx.setUnderwater(under);
     }
-    const targetFov = 65 + (player.sprinting ? 3 : 0);
+    const targetFov = settings.values.fov + (player.sprinting ? 3 : 0);
     cam.fov += (targetFov - cam.fov) * Math.min(1, dt * 8);
   }
 
+  const visibleChunks = [];
   function drawList() {
-    const out = [];
+    const out = visibleChunks;
+    out.length = 0;
     const pcx = Math.floor(player.pos[0] / 16);
     const pcz = Math.floor(player.pos[2] / 16);
     for (const c of world.chunks.values()) {
@@ -1041,7 +1049,8 @@
     sfx.noise(210, 0.09, 0.9, 0.11, 0.8);
     animalSound(mob.type, 0.10);
     if (defeated) {
-      const drop = mob.type === 'sheep' ? MC.Block.WOOL :
+      const drop = mob.moonlit ? MC.ITEM_KEY.moon_wool :
+        mob.type === 'sheep' ? MC.Block.WOOL :
         mob.type === 'cow' ? MC.ITEM_KEY.raw_beef :
         mob.type === 'pig' ? MC.ITEM_KEY.raw_pork :
         mob.type === 'rabbit' ? MC.ITEM_KEY.leather : MC.ITEM_KEY.feather;
@@ -1134,6 +1143,23 @@
     const hit = targetInfo();
     if (!hit) return;
     if (hit.id === MC.Block.TABLE) { openCrafting(); return; }
+    if (hit.id === MC.Block.TABLET || hit.id === MC.Block.GLITCH) {
+      const lore = secrets ? secrets.readLore(hit.x, hit.y, hit.z) : null;
+      if (lore) openRead(lore);
+      return;
+    }
+    if (hit.id === MC.Block.STONE_SWORD) {
+      const lore = secrets ? secrets.swordStone(hit.x, hit.y, hit.z) : null;
+      if (lore) openRead(lore);
+      // 拔出来之后，石头里就只剩下一个孔。
+      if (secrets && secrets.flags.swordPulled &&
+          world.getBlock(hit.x, hit.y, hit.z) === MC.Block.STONE_SWORD) {
+        world.setBlock(hit.x, hit.y, hit.z, 0);
+        rebuildNear(hit.x, hit.z);
+        dirtySave = true;
+      }
+      return;
+    }
     const px = hit.x + hit.nx, py = hit.y + hit.ny, pz = hit.z + hit.nz;
     if (py < 0 || py >= MC.WORLD.HEIGHT) return;
     const cur = world.getBlock(px, py, pz);
@@ -1178,13 +1204,27 @@
   /* ================= 输入 ================= */
   let lastSpace = -1;
 
+  const KONAMI = ['ArrowUp', 'ArrowUp', 'ArrowDown', 'ArrowDown',
+    'ArrowLeft', 'ArrowRight', 'ArrowLeft', 'ArrowRight', 'KeyB', 'KeyA'];
+  const konamiBuf = [];
+  function feedKonami(code) {
+    konamiBuf.push(code);
+    if (konamiBuf.length > KONAMI.length) konamiBuf.shift();
+    if (konamiBuf.length !== KONAMI.length) return;
+    if (KONAMI.every((c, i) => c === konamiBuf[i])) {
+      konamiBuf.length = 0;
+      if (secrets) secrets.konami();
+    }
+  }
+
   window.addEventListener('keydown', (e) => {
-    if (e.code === 'Space' || e.code === 'Tab') e.preventDefault();
+    if (e.code !== 'Escape' && e.target.matches('input, select, textarea')) return;
+    if (e.code === 'Space' || (e.code === 'Tab' && state.mode === 'playing')) e.preventDefault();
     keys[e.code] = true;
     if (e.code === 'Escape') {
       if (state.mode === 'inventory') closeInventory(true);
       else if (state.mode === 'crafting') closeCrafting(true);
-      else if (state.mode === 'journal') closeJournal(true);
+      else if (state.mode === 'reading') closeRead(true);
       else if (state.mode === 'playing') {
         pauseGame();
         if (document.pointerLockElement) document.exitPointerLock();
@@ -1192,8 +1232,9 @@
       return;
     }
     if (e.repeat) return;
-    if (e.code === 'KeyJ' && state.mode === 'journal') {
-      e.preventDefault(); closeJournal(true); return;
+    if (state.mode === 'menu' || state.mode === 'paused') feedKonami(e.code);
+    if ((e.code === 'KeyE' || e.code === 'KeyJ') && state.mode === 'reading') {
+      e.preventDefault(); closeRead(true); return;
     }
     if (e.code === 'KeyE' && (state.mode === 'inventory' || state.mode === 'crafting')) {
       e.preventDefault();
@@ -1206,12 +1247,6 @@
     if (e.code === 'KeyE') {
       e.preventDefault();
       openInventory();
-    } else if (e.code === 'KeyJ') {
-      e.preventDefault();
-      state.mode = 'journal';
-      state.mouseDown[0] = state.mouseDown[1] = false;
-      expedition.open();
-      if (document.pointerLockElement) document.exitPointerLock();
     } else if (e.code === 'F3') {
       e.preventDefault();
       state.debug = !state.debug;
@@ -1220,7 +1255,7 @@
       const f = player.toggleFly();
       toast(f ? '飞行模式 开' : '飞行模式 关');
     } else if (e.code === 'KeyM') {
-      toast(minimap.toggle() ? '地形地图 已显示' : '地形地图 已隐藏');
+      toast(minimap.toggle() ? '手绘地图 已展开' : '手绘地图 已收起');
     } else if (e.code === 'KeyT') {
       e.preventDefault();
       const quarter = Math.floor(state.time / (MC.DAY_LENGTH / 4));
@@ -1334,10 +1369,21 @@
     saveWorld();
   }
 
-  function closeJournal(relock) {
-    if (state.mode !== 'journal') return;
-    expedition.close();
+  function openRead(lore) {
+    if (!lore || state.mode === 'reading') return;
+    state.mode = 'reading';
+    for (const k in keys) keys[k] = false;
+    state.mouseDown[0] = state.mouseDown[1] = false;
+    readTitleEl.textContent = lore.title || '石碑';
+    readTextEl.textContent = lore.text || '';
+    readEl.classList.remove('hide');
+    if (document.pointerLockElement) document.exitPointerLock();
+  }
+
+  function closeRead(relock) {
+    if (state.mode !== 'reading') return;
     state.mode = 'playing';
+    readEl.classList.add('hide');
     if (relock) requestLock();
   }
 
@@ -1346,7 +1392,8 @@
   tabBag.addEventListener('click', () => { state.invTab = 'bag'; renderInv(); });
   tabCreative.addEventListener('click', () => { state.invTab = 'creative'; renderInv(); });
   craftResultEl.addEventListener('click', takeCraft);
-  $('journalClose').addEventListener('click', () => closeJournal(true));
+  $('readClose').addEventListener('click', () => closeRead(true));
+  readEl.addEventListener('click', (e) => { if (e.target === readEl) closeRead(true); });
 
   primary.addEventListener('click', () => {
     if (primary.disabled) return;
@@ -1371,9 +1418,10 @@
       data.inv = state.bag.map(s => (s ? (s.maxDur ? [s.id, s.count, s.dur, s.maxDur] : [s.id, s.count]) : 0));
       data.hotbar = state.hotbar.map(s => (s ? (s.maxDur ? [s.id, s.count, s.dur, s.maxDur] : [s.id, s.count]) : 0));
       data.time = state.time;
-      data.summitEggs = state.summitEggs;
-      data.discovered = state.discovered;
-      data.tracked = state.tracked;
+      data.secrets = state.seen;
+      data.flags = state.flags;
+      if (state.explored.length > 640) state.explored.splice(0, state.explored.length - 640);
+      data.explored = state.explored;
       data.player = {
         pos: player.pos.slice(), yaw: player.yaw, pitch: player.pitch, flying: player.flying
       };
@@ -1478,25 +1526,6 @@
 
     if (state.mode === 'playing') {
       player.update(dt, readInput());
-      for (let i = 0; i < world.peaks.length; i++) {
-        if (state.summitEggs[i]) continue;
-        const peak = world.peaks[i], x = Math.round(peak[0]), z = Math.round(peak[1]);
-        const summitY = world.heightAt(x, z);
-        if (Math.hypot(player.pos[0] - x - 0.5, player.pos[2] - z - 0.5) < 5 &&
-            player.pos[1] >= summitY + 0.5) {
-          const room = state.bag.reduce((n, slot) => n + (!slot ? MAX_STACK :
-            slot.id === MC.ITEM_KEY.diamond ? MAX_STACK - slot.count : 0), 0);
-          if (room >= 3 && addToBag(MC.ITEM_KEY.diamond, 3) === 3) {
-            state.summitEggs[i] = true;
-            dirtySave = true;
-            toast('登顶彩蛋：云海探险家！获得钻石 ×3');
-            sfx.tone(780, 0.14, 0.12, 'sine', 1.2);
-          } else if (state.time - state.summitFullWarnAt > 4) {
-            state.summitFullWarnAt = state.time;
-            toast('山顶彩蛋：背包留出空间领取钻石');
-          }
-        }
-      }
       if (player.wantStep) {
         const ground = world.getBlock(
           Math.floor(player.pos[0]), Math.floor(player.pos[1] - 0.05), Math.floor(player.pos[2]));
@@ -1513,6 +1542,7 @@
       }
       handleHold(dt);
       mobManager.update(dt, player, true);
+      if (secrets) secrets.update(dt);
 
       const eyeNow = player.eye();
       const underNow = MC.Block.isLiquid(world.getBlock(
@@ -1549,9 +1579,8 @@
     if (pcx !== lastChunkX || pcz !== lastChunkZ) {
       lastChunkX = pcx; lastChunkZ = pcz;
       unloadFar();
-      stream(0, true);
     }
-    stream(dt);
+    if (loaded) stream();
     particles.update(dt, world);
     updateCamera(dt);
     horizon.update(player.pos[0], player.pos[2]);
@@ -1563,6 +1592,7 @@
     crosshair.classList.toggle('mob', !!aimedMob);
     const mobBoxes = [];
     mobManager.collect(mobBoxes);
+    if (secrets) secrets.collect(mobBoxes);
     const held = state.hotbar[state.selected];
     hand.itemId = held ? held.id : 0;
     hand.swing = state.swing;
@@ -1574,7 +1604,6 @@
 
     updateHud(dt);
     if (state.mode === 'playing') minimap.update(player, dt);
-    if (state.mode === 'playing') expedition.update(player);
     if (state.mode === 'playing') saveWorld();
   }
 
@@ -1586,18 +1615,74 @@
   requestAnimationFrame(frame);
   requestAnimationFrame(preloadTick);
 
-  // 调试入口
-  const shadowBtn = $('shadowBtn');
-  shadowBtn.addEventListener('click', () => {
-    renderer.shadowEnabled = !renderer.shadowEnabled;
-    shadowBtn.textContent = '阴影：' + (renderer.shadowEnabled ? '开' : '关');
+  // 画面设置立即生效，并独立于世界进度保存。
+  const shadowBtn = $('shadowBtn'), particleBtn = $('particleBtn');
+  function applySettings() {
+    const v = settings.values;
+    renderer.resolutionScale = v.resolution;
+    renderer.shadowEnabled = v.shadows;
+    particles.setEnabled(v.particles);
+    shadowBtn.textContent = '阴影：' + (v.shadows ? '开' : '关');
+    particleBtn.textContent = '粒子：' + (v.particles ? '开' : '关');
+    $('viewDistance').value = v.distance;
+    $('resolution').value = v.resolution;
+    $('fov').value = v.fov;
+    $('fovValue').textContent = v.fov + '°';
+    if (RENDER_R !== v.distance) {
+      RENDER_R = v.distance;
+      OFFSETS_GEN = makeOffsets(RENDER_R + 1);
+      unloadFar();
+    }
+  }
+  shadowBtn.addEventListener('click', () => { settings.set('shadows', !settings.values.shadows); applySettings(); });
+  particleBtn.addEventListener('click', () => { settings.set('particles', !settings.values.particles); applySettings(); });
+  for (const [id, key] of [['viewDistance', 'distance'], ['resolution', 'resolution'], ['fov', 'fov']]) {
+    $(id).addEventListener('input', e => { settings.set(key, Number(e.target.value)); applySettings(); });
+  }
+  applySettings();
+
+  const debugMode = params.has('debug');
+  secrets = new MC.Secrets({
+    world, player, state, sfx, particles, mobManager, debug: debugMode,
+    hooks: {
+      toast,
+      addItem: (id, count) => addToBag(id, count) === count,
+      save: () => { dirtySave = true; saveWorld(true); },
+      flash: () => {
+        flashEl.classList.add('show');
+        setTimeout(() => flashEl.classList.remove('show'), 760);
+      },
+      aurora: on => auroraEl.classList.toggle('show', !!on),
+      meteor: on => meteorsEl.classList.toggle('show', !!on)
+    }
   });
 
-  const particleBtn = $('particleBtn');
-  particleBtn.addEventListener('click', () => {
-    particles.setEnabled(!particles.enabled);
-    particleBtn.textContent = '粒子：' + (particles.enabled ? '开' : '关');
-  });
+  const debug = debugMode ? {
+    teleport(x, y, z) {
+      player.pos[0] = x; player.pos[1] = y; player.pos[2] = z;
+      player.vel.fill(0);
+      return player.pos.slice();
+    },
+    setTime(hours) {
+      state.time = (hours - 12) / 24 * MC.DAY_LENGTH;
+      if (state.time < 0) state.time += MC.DAY_LENGTH;
+      return state.time;
+    },
+    goto(name) {
+      const site = world.sites.find(s => s.type === name);
+      if (!site) return null;
+      player.flying = true;
+      player.pos = [site.x + 0.5, site.y + 2, site.z + 0.5];
+      return site;
+    },
+    trigger: id => secrets.trigger(id),
+    list: () => secrets.list(),
+    secrets: () => secrets,
+    sites: () => world.sites.map(s => ({ ...s }))
+  } : null;
 
-  window.__mc = { world, player, renderer, cam, state, seed, mobManager, sfx, particles, horizon, expedition, worldRef: world };
+  window.__mc = {
+    world, player, renderer, cam, state, seed, mobManager, sfx, particles,
+    horizon, minimap, secrets, settings, debug, worldRef: world
+  };
 })();

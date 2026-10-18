@@ -1,10 +1,8 @@
-/* horizon.js — 分帧生成的远景地形，只显示轮廓与群系色。 */
+/* horizon.js — 限时采样与网格构建，远山沿真实地形轮廓连续起伏。 */
 (function () {
   'use strict';
   const MC = window.MC;
-  const STEP = 8;
-  const CELLS = 128;
-  const SIDE = CELLS + 1;
+  const STEP = 4, CELLS = 256, SIDE = CELLS + 1;
   const HALF = CELLS * STEP / 2;
 
   class Horizon {
@@ -15,83 +13,87 @@
       this.originX = Infinity;
       this.originZ = Infinity;
       this.nextRow = SIDE;
+      this.phase = 'idle';
       this.heights = new Float32Array(SIDE * SIDE);
       this.tiles = new Uint8Array(SIDE * SIDE);
+      // 固定大小缓冲反复使用，避免一次性创建数十万个临时数组。
+      this.vertices = new Float32Array(SIDE * SIDE * 10);
+      this.indices = new Uint32Array(CELLS * CELLS * 6);
+      let n = 0;
+      for (let z = 0; z < CELLS; z++) for (let x = 0; x < CELLS; x++) {
+        const i = z * SIDE + x;
+        this.indices[n++] = i; this.indices[n++] = i + SIDE; this.indices[n++] = i + 1;
+        this.indices[n++] = i + 1; this.indices[n++] = i + SIDE; this.indices[n++] = i + SIDE + 1;
+      }
+      this.tileUV = MC.BLOCKS.map(block => {
+        if (!block || !block.tex) return [0, 0];
+        const uv = MC.Atlas.uv(block.tex.top);
+        return [(uv[0] + uv[2]) / 2, (uv[1] + uv[3]) / 2];
+      });
     }
 
     begin(x, z) {
       this.originX = Math.round(x / 64) * 64 - HALF;
       this.originZ = Math.round(z / 64) * 64 - HALF;
       this.nextRow = 0;
+      this.phase = 'sample';
     }
 
     update(x, z) {
-      const centerX = this.originX + HALF, centerZ = this.originZ + HALF;
-      if (this.nextRow === SIDE && (Math.abs(x - centerX) > 48 || Math.abs(z - centerZ) > 48))
+      if (this.phase === 'idle' &&
+          (Math.abs(x - this.originX - HALF) > 48 || Math.abs(z - this.originZ - HALF) > 48))
         this.begin(x, z);
-      if (this.nextRow === SIDE) return;
-
-      // 每帧只取几行地形，移动时不会因为重建远景而停顿。
-      const end = Math.min(SIDE, this.nextRow + 7);
-      for (let row = this.nextRow; row < end; row++) for (let col = 0; col < SIDE; col++) {
-        const wx = this.originX + col * STEP;
-        const wz = this.originZ + row * STEP;
-        const field = this.world.biomeField(wx, wz);
-        const h = this.world.heightAt(wx, wz, field);
-        const biome = this.world.biomeAt(wx, wz, h, field);
-        const i = row * SIDE + col;
-        this.heights[i] = Math.max(MC.WORLD.SEA + 0.1, h) - 1.4;
-        this.tiles[i] = h <= MC.WORLD.SEA ? MC.Block.WATER :
-          h > 88 ? (MC.Noise.hash2(col >> 2, row >> 2, this.world.seed + 6031) > 0.60 ? MC.Block.SNOW : MC.Block.STONE) :
-          h > 65 ? (MC.Noise.hash2(col >> 2, row >> 2, this.world.seed + 6037) > 0.19 ? MC.Block.STONE : MC.Block.GRASS) :
-          biome === 'desert' || biome === 'beach' ? MC.Block.SAND :
-          biome === 'badlands' ? MC.Block.TERRACOTTA :
-          biome === 'snow' ? MC.Block.SNOW : MC.Block.GRASS;
+      if (this.phase === 'idle') return;
+      const deadline = performance.now() + 2;
+      // 整体完成后才交换 GPU 网格，生成途中继续显示上一份完整远景。
+      if (this.phase === 'upload') {
+        const next = this.renderer.makeMesh({ verts: this.vertices, idx: this.indices });
+        this.renderer.disposeMesh(this.mesh);
+        this.mesh = next;
+        this.renderer.horizonMesh = next;
+        this.phase = 'idle';
+        return;
       }
-      this.nextRow = end;
-      if (end === SIDE) this.upload();
+      do {
+        if (this.phase === 'sample') this.sampleRow(this.nextRow);
+        else this.buildRow(this.nextRow);
+        if (++this.nextRow === SIDE) {
+          this.phase = this.phase === 'sample' ? 'mesh' : 'upload';
+          this.nextRow = this.phase === 'mesh' ? 0 : SIDE;
+          return;
+        }
+      } while (performance.now() < deadline);
     }
 
-    upload() {
-      const verts = [], idx = [];
-      const levels = new Float32Array(CELLS * CELLS);
-      for (let row = 0; row < CELLS; row++) for (let col = 0; col < CELLS; col++) {
-        const i = row * SIDE + col, h = this.heights;
-        levels[row * CELLS + col] = Math.round((h[i] + h[i + 1] + h[i + SIDE] + h[i + SIDE + 1]) * 0.25);
-      }
-      const quad = (points, normal, tile, brightness, material) => {
-        const uv = MC.Atlas.uv(tile);
-        const u = (uv[0] + uv[2]) * 0.5, v = (uv[1] + uv[3]) * 0.5;
-        const base = verts.length / 10;
-        for (const p of points) verts.push(p[0], p[1], p[2], u, v, brightness,
-          normal[0], normal[1], normal[2], material);
-        idx.push(base, base + 1, base + 2, base, base + 2, base + 3);
-      };
-      // 远处仍以方块阶梯呈现；只补高低差产生的外侧墙面。
-      for (let row = 0; row < CELLS; row++) for (let col = 0; col < CELLS; col++) {
+    sampleRow(row) {
+      const B = MC.Block;
+      for (let col = 0; col < SIDE; col++) {
         const x = this.originX + col * STEP, z = this.originZ + row * STEP;
-        const y = levels[row * CELLS + col];
-        const block = this.tiles[row * SIDE + col];
-        const tile = MC.BLOCKS[block].tex.top;
-        const material = block === MC.Block.WATER ? -1 : block === MC.Block.SAND ? -2 :
-          block === MC.Block.TERRACOTTA ? -3 : 0;
-        quad([[x, y, z], [x, y, z + STEP], [x + STEP, y, z + STEP], [x + STEP, y, z]],
-          [0, 1, 0], tile, 0.96, material);
-        const left = col ? levels[row * CELLS + col - 1] : y;
-        const right = col < CELLS - 1 ? levels[row * CELLS + col + 1] : y;
-        const back = row ? levels[(row - 1) * CELLS + col] : y;
-        const front = row < CELLS - 1 ? levels[(row + 1) * CELLS + col] : y;
-        if (left < y) quad([[x, y, z + STEP], [x, y, z], [x, left, z], [x, left, z + STEP]], [-1, 0, 0], tile, 0.79, material);
-        if (right < y) quad([[x + STEP, y, z], [x + STEP, y, z + STEP], [x + STEP, right, z + STEP], [x + STEP, right, z]], [1, 0, 0], tile, 0.82, material);
-        if (back < y) quad([[x, y, z], [x + STEP, y, z], [x + STEP, back, z], [x, back, z]], [0, 0, -1], tile, 0.75, material);
-        if (front < y) quad([[x + STEP, y, z + STEP], [x, y, z + STEP], [x, front, z + STEP], [x + STEP, front, z + STEP]], [0, 0, 1], tile, 0.84, material);
+        const field = this.world.biomeField(x, z);
+        const h = this.world.heightAt(x, z, field);
+        const biome = this.world.biomeAt(x, z, h, field);
+        const i = row * SIDE + col;
+        this.heights[i] = Math.max(MC.WORLD.SEA + 0.8, h + 0.8);
+        this.tiles[i] = h <= MC.WORLD.SEA ? B.WATER :
+          biome === 'desert' || biome === 'beach' ? B.SAND :
+          biome === 'badlands' ? B.TERRACOTTA : biome === 'snow' ? B.SNOW : B.GRASS;
       }
-      const next = this.renderer.makeMesh({ verts: new Float32Array(verts), idx: new Uint32Array(idx) });
-      this.renderer.disposeMesh(this.mesh);
-      this.mesh = next;
-      this.renderer.horizonMesh = next;
+    }
+
+    buildRow(row) {
+      const h = this.heights, v = this.vertices, B = MC.Block;
+      for (let col = 0; col < SIDE; col++) {
+        const i = row * SIDE + col, b = this.tiles[i], uv = this.tileUV[b];
+        const nx = h[row * SIDE + Math.max(0, col - 1)] - h[row * SIDE + Math.min(CELLS, col + 1)];
+        const nz = h[Math.max(0, row - 1) * SIDE + col] - h[Math.min(CELLS, row + 1) * SIDE + col];
+        const len = Math.hypot(nx, STEP * 2, nz);
+        let n = i * 10;
+        v[n++] = this.originX + col * STEP; v[n++] = h[i]; v[n++] = this.originZ + row * STEP;
+        v[n++] = uv[0]; v[n++] = uv[1]; v[n++] = 0.94;
+        v[n++] = nx / len; v[n++] = STEP * 2 / len; v[n++] = nz / len;
+        v[n] = b === B.WATER ? -1 : b === B.SAND ? -2 : b === B.TERRACOTTA ? -3 : b === B.SNOW ? -4 : 0;
+      }
     }
   }
-
   MC.Horizon = Horizon;
 })();

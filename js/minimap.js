@@ -1,10 +1,11 @@
-/* minimap.js — low-cost procedural overview and snow mountain waypoints */
+/* minimap.js — 手绘地图：只有走过的地方才会显影。 */
 (function () {
   'use strict';
   const MC = window.MC;
   const RES = 96;
   const SIZE = 192;
-  const STEP = 14; // blocks per source pixel; the visible map spans 1344 blocks
+  const STEP = 14; // 每个源像素对应的方块数，整张图约 1344 格
+  const REVEAL = 88; // 记忆半径（格）
   const COLORS = {
     ocean: [48, 102, 163], frozen_ocean: [147, 195, 216],
     beach: [218, 200, 144], desert: [220, 186, 119],
@@ -12,10 +13,9 @@
     snow: [218, 232, 231], mountain: [128, 133, 130],
     cherry: [205, 146, 172], badlands: [170, 99, 72]
   };
-  const DIRECTIONS = ['北', '东北', '东', '东南', '南', '西南', '西', '西北'];
 
   class Minimap {
-    constructor(world, container, canvas, nearestEl) {
+    constructor(world, container, canvas, state) {
       this.world = world;
       this.container = container;
       this.canvas = canvas;
@@ -28,7 +28,15 @@
       this.preview.width = this.preview.height = 16;
       this.previewCtx = this.preview.getContext('2d');
       this.previewReady = false;
-      this.nearestEl = nearestEl;
+      this.explored = state.explored || (state.explored = []);
+      this.lastPoint = this.explored.length ? this.explored[this.explored.length - 1] : null;
+      this.fog = document.createElement('canvas');
+      this.fog.width = this.fog.height = SIZE;
+      this.fogCtx = this.fog.getContext('2d');
+      this.fogDirty = true;
+      // 一开始，纸上只有墨。
+      this.fogCtx.fillStyle = 'rgba(9, 19, 21, .93)';
+      this.fogCtx.fillRect(0, 0, SIZE, SIZE);
       this.heights = new Int16Array(RES * RES);
       this.image = null;
       this.centerX = this.centerZ = 0;
@@ -38,6 +46,7 @@
       this.ready = false;
       this.visible = true;
       this.drawWait = 0;
+      this.fogAt = 0;
     }
 
     toggle() {
@@ -70,6 +79,7 @@
       }
       this.previewCtx.putImageData(preview, 0, 0);
       this.previewReady = true;
+      this.fogDirty = true;
     }
 
     buildRows(count) {
@@ -104,12 +114,51 @@
         this.building = false;
         this.image = null;
         this.drawWait = 0;
+        this.buildFog();
       }
     }
 
     project(x, z) {
       return [SIZE / 2 + (x - this.centerX) * SIZE / (RES * STEP),
         SIZE / 2 + (z - this.centerZ) * SIZE / (RES * STEP)];
+    }
+
+    remember(player) {
+      const x = Math.round(player.pos[0]), z = Math.round(player.pos[2]);
+      if (this.lastPoint &&
+          Math.hypot(x - this.lastPoint[0], z - this.lastPoint[1]) < 20) return;
+      this.lastPoint = [x, z];
+      this.explored.push([x, z]);
+      if (this.explored.length > 640) this.explored.splice(0, this.explored.length - 640);
+      this.fogDirty = true;
+    }
+
+    buildFog() {
+      const ctx = this.fogCtx;
+      ctx.globalCompositeOperation = 'source-over';
+      ctx.clearRect(0, 0, SIZE, SIZE);
+      // 底噪：没去过的地方是纸上的墨。
+      ctx.fillStyle = 'rgba(9, 19, 21, .93)';
+      ctx.fillRect(0, 0, SIZE, SIZE);
+      ctx.globalCompositeOperation = 'destination-out';
+      const radius = Math.max(9, REVEAL * SIZE / (RES * STEP));
+      for (const p of this.explored) {
+        if (!Array.isArray(p) || !Number.isFinite(p[0]) || !Number.isFinite(p[1])) continue;
+        const pos = this.project(p[0], p[1]);
+        if (pos[0] < -radius || pos[1] < -radius ||
+            pos[0] > SIZE + radius || pos[1] > SIZE + radius) continue;
+        const g = ctx.createRadialGradient(pos[0], pos[1], radius * 0.18,
+          pos[0], pos[1], radius);
+        g.addColorStop(0, 'rgba(0,0,0,1)');
+        g.addColorStop(0.62, 'rgba(0,0,0,.92)');
+        g.addColorStop(1, 'rgba(0,0,0,0)');
+        ctx.fillStyle = g;
+        ctx.beginPath();
+        ctx.arc(pos[0], pos[1], radius, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.globalCompositeOperation = 'source-over';
+      this.fogDirty = false;
     }
 
     draw(player) {
@@ -124,108 +173,60 @@
         ctx.fillStyle = '#cfeaf1';
         ctx.font = '12px sans-serif';
         ctx.textAlign = 'center';
-        ctx.fillText('正在绘制地图…', SIZE / 2, SIZE / 2);
+        ctx.fillText('正在描地图…', SIZE / 2, SIZE / 2);
       }
+      ctx.drawImage(this.fog, 0, 0);
 
-      if ((this.ready || this.previewReady) && this.world.trails) {
-        ctx.save();
-        ctx.strokeStyle = 'rgba(248, 225, 155, .92)';
-        ctx.lineWidth = 1.5;
-        for (const trail of this.world.trails) {
-          ctx.beginPath();
-          for (let j = 0; j < trail.length; j += 4) {
-            const p = this.project(trail[j].x, trail[j].z);
-            if (j === 0) ctx.moveTo(p[0], p[1]); else ctx.lineTo(p[0], p[1]);
-          }
-          ctx.stroke();
-          const start = this.project(trail[0].x, trail[0].z);
-          ctx.fillStyle = '#ffd36a';
-          ctx.fillRect(start[0] - 2, start[1] - 2, 4, 4);
-        }
-        ctx.restore();
-      }
+      // 只有玩家的方向，没有目标。
+      const pos = this.project(player.pos[0], player.pos[2]);
+      ctx.save();
+      ctx.translate(pos[0], pos[1]);
+      ctx.rotate(-player.yaw);
+      ctx.beginPath();
+      ctx.moveTo(0, -10);
+      ctx.lineTo(6, 7);
+      ctx.lineTo(0, 3);
+      ctx.lineTo(-6, 7);
+      ctx.closePath();
+      ctx.fillStyle = '#68f0f5';
+      ctx.strokeStyle = '#10354b';
+      ctx.lineWidth = 2.5;
+      ctx.fill();
+      ctx.stroke();
+      ctx.restore();
 
-      let nearest = 0, nearestDist = Infinity;
-      for (let i = 0; i < this.world.peaks.length; i++) {
-        const peak = this.world.peaks[i];
-        const dx = peak[0] - player.pos[0], dz = peak[1] - player.pos[2];
-        const dist = Math.hypot(dx, dz);
-        if (dist < nearestDist) { nearest = i; nearestDist = dist; }
-        if (!this.ready && !this.previewReady) continue;
-        const pos = this.project(peak[0], peak[1]);
-        const mx = Math.max(10, Math.min(SIZE - 10, pos[0]));
-        const my = Math.max(10, Math.min(SIZE - 10, pos[1]));
-        ctx.beginPath();
-        ctx.arc(mx, my, 8, 0, Math.PI * 2);
-        ctx.fillStyle = '#f6fdff';
-        ctx.fill();
-        ctx.lineWidth = 2;
-        ctx.strokeStyle = i === nearest ? '#f9d66b' : '#5d8499';
-        ctx.stroke();
-        ctx.fillStyle = '#17435d';
-        ctx.font = 'bold 10px sans-serif';
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillText(String(i + 1), mx, my + 0.5);
-      }
-      if ((this.ready || this.previewReady) && this.world.landmarks) {
-        for (const mark of this.world.landmarks) {
-          if (mark.id.startsWith('peak')) continue;
-          const pos = this.project(mark.x, mark.z);
-          const mx = Math.max(8, Math.min(SIZE - 8, pos[0]));
-          const my = Math.max(8, Math.min(SIZE - 8, pos[1]));
-          ctx.fillStyle = '#244d3d';
-          ctx.fillRect(mx - 6, my - 6, 12, 12);
-          ctx.strokeStyle = '#efd399';
-          ctx.lineWidth = 1.5;
-          ctx.strokeRect(mx - 6, my - 6, 12, 12);
-          ctx.fillStyle = '#fff7df';
-          ctx.font = 'bold 10px sans-serif';
-          ctx.textAlign = 'center';
-          ctx.textBaseline = 'middle';
-          ctx.fillText(mark.icon, mx, my + 0.5);
-        }
-      }
+      // 四个方向，不指任何地方。
+      ctx.fillStyle = 'rgba(240, 247, 228, .72)';
+      ctx.font = '700 9px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('北', SIZE / 2, 8);
+      ctx.fillText('南', SIZE / 2, SIZE - 8);
+      ctx.fillText('西', 8, SIZE / 2);
+      ctx.fillText('东', SIZE - 8, SIZE / 2);
 
-      if (this.ready || this.previewReady) {
-        const pos = this.project(player.pos[0], player.pos[2]);
-        ctx.save();
-        ctx.translate(pos[0], pos[1]);
-        ctx.rotate(-player.yaw);
-        ctx.beginPath();
-        ctx.moveTo(0, -10);
-        ctx.lineTo(6, 7);
-        ctx.lineTo(0, 3);
-        ctx.lineTo(-6, 7);
-        ctx.closePath();
-        ctx.fillStyle = '#68f0f5';
-        ctx.strokeStyle = '#10354b';
-        ctx.lineWidth = 2.5;
-        ctx.fill();
-        ctx.stroke();
-        ctx.restore();
-      }
       ctx.strokeStyle = 'rgba(230, 251, 255, .65)';
       ctx.lineWidth = 2;
       ctx.strokeRect(1, 1, SIZE - 2, SIZE - 2);
-
-      const peak = this.world.peaks[nearest];
-      const dx = peak[0] - player.pos[0], dz = peak[1] - player.pos[2];
-      const angle = Math.atan2(dx, -dz);
-      const dir = DIRECTIONS[((Math.round(angle / (Math.PI / 4)) % 8) + 8) % 8];
-      this.nearestEl.textContent = '最近雪山 ' + (nearest + 1) + ' · ' + dir + ' ' + Math.round(nearestDist) + ' 格';
     }
 
     update(player, dt) {
+      this.remember(player);
       if (!this.visible) return;
-      if (!this.building && (!this.ready ||
-          Math.abs(player.pos[0] - this.centerX) > 192 ||
-          Math.abs(player.pos[2] - this.centerZ) > 192)) this.startBuild(player);
+      const now = performance.now();
+      if (this.fogDirty && now - this.fogAt > 500) {
+        this.buildFog();
+        this.fogAt = now;
+      }
+      const moved = !this.ready ||
+        Math.abs(player.pos[0] - this.centerX) > 192 ||
+        Math.abs(player.pos[2] - this.centerZ) > 192;
+      if (!this.building && moved) this.startBuild(player);
       if (this.building) this.buildRows(6);
       this.drawWait -= dt;
       if (this.drawWait <= 0) {
         this.draw(player);
-        this.drawWait = 0.08;
+        this.drawWait = 0.1;
       }
     }
   }

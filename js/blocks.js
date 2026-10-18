@@ -600,6 +600,106 @@
     }
   });
 
+  /* ---------- 彩蛋方块 ---------- */
+  // 石碑：风化的岩面，刻着几行浅浅的记号。
+  tile('tablet', (d, rng) => {
+    fill(d, [112, 108, 96]);
+    specks(d, rng, [[98, 94, 84], [126, 121, 108], [86, 83, 75]], 30, 2, 2);
+    for (let i = 0; i < 16; i++) {
+      set(d, i, 0, 82, 79, 70); set(d, i, 15, 70, 68, 61);
+    }
+    for (let i = 1; i < 15; i++) {
+      set(d, 0, i, 84, 81, 72); set(d, 15, i, 74, 71, 63);
+    }
+    // 刻痕：竖排的短句与一个像山的符号。
+    for (let row = 0; row < 4; row++) {
+      const y = 3 + row * 3;
+      for (let col = 0; col < 4; col++) {
+        const x = 3 + col * 3;
+        set(d, x, y, 196, 190, 158);
+        set(d, x + 1, y, 196, 190, 158);
+        if (rng() < 0.6) set(d, x, y + 1, 176, 170, 140);
+      }
+    }
+    set(d, 7, 11, 208, 200, 162); set(d, 8, 11, 208, 200, 162);
+    set(d, 6, 12, 208, 200, 162); set(d, 9, 12, 208, 200, 162);
+    set(d, 5, 13, 208, 200, 162); set(d, 10, 13, 208, 200, 162);
+  });
+
+  // 石中剑：正面是斜插进岩层的剑身，顶面露出护手与剑柄。
+  tile('sword_stone_side', (d, rng) => {
+    fill(d, [118, 115, 108]);
+    specks(d, rng, [[104, 101, 95], [134, 130, 122], [92, 90, 86]], 26, 2, 2);
+    for (let i = 0; i < 4; i++) {
+      const x = 6 + i, y = 5 + i;
+      set(d, x, y, 236, 240, 244); set(d, x + 1, y, 208, 216, 222);
+      set(d, x, y + 1, 188, 196, 204); set(d, x + 1, y + 1, 150, 158, 168);
+    }
+    // 护手
+    for (let i = 0; i < 7; i++) {
+      set(d, 3 + i, 4, 210, 174, 82);
+      set(d, 3 + i, 5, 168, 134, 54);
+    }
+    // 剑柄
+    for (let i = 0; i < 4; i++) {
+      set(d, 6 + i, 2, 128, 86, 48);
+      set(d, 7 + i, 1, 154, 108, 60);
+    }
+    set(d, 3, 4, 240, 208, 120); set(d, 9, 4, 240, 208, 120);
+    // 插口处的裂纹
+    for (let i = 0; i < 5; i++) set(d, 7 + (i % 2), 9 + i, 74, 72, 68);
+  });
+  tile('sword_stone_top', (d, rng) => {
+    fill(d, [118, 115, 108]);
+    specks(d, rng, [[104, 101, 95], [134, 130, 122]], 22, 2, 2);
+    for (let i = 0; i < 8; i++) {
+      set(d, 4 + i, 7, 208, 216, 222); set(d, 4 + i, 8, 160, 168, 178);
+    }
+    for (let i = 0; i < 5; i++) {
+      set(d, 5 + i, 5, 214, 178, 84); set(d, 5 + i, 10, 176, 142, 58);
+    }
+    for (let i = 0; i < 3; i++) set(d, 7 + i, 6, 132, 90, 50);
+    set(d, 8, 7, 240, 244, 248);
+  });
+
+  // 丢失的贴图：粉黑格，一眼就知道这里不该存在。
+  tile('glitch', (d) => {
+    for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) {
+      const on = ((x >> 2) + (y >> 2)) % 2 === 0;
+      set(d, x, y, on ? 255 : 12, on ? 0 : 12, on ? 255 : 14);
+    }
+    for (let i = 0; i < 16; i++) {
+      set(d, i, 0, 255, 255, 255); set(d, i, 15, 0, 0, 0);
+    }
+  });
+
+  // 旗帜：风里褪了色的红布。
+  tile('banner', (d, rng) => {
+    fill(d, [146, 48, 44]);
+    for (let y = 0; y < 16; y++) {
+      const shade = Math.sin(y * 0.9) * 6;
+      for (let x = 1; x < 15; x++) set(d, x, y, 146 + shade, 48 + shade, 44 + shade * 0.7);
+    }
+    for (let i = 0; i < 16; i++) { set(d, 0, i, 92, 30, 30); set(d, 15, i, 92, 30, 30); }
+    for (let i = 0; i < 16; i++) set(d, i, 0, 104, 34, 34);
+    const cx = 8, cy = 7;
+    for (let dy = -3; dy <= 3; dy++) for (let dx = -3; dx <= 3; dx++) {
+      if (Math.abs(dx) + Math.abs(dy) <= 3) set(d, cx + dx, cy + dy, 232, 218, 176);
+    }
+    set(d, 8, 7, 146, 48, 44);
+    for (let i = 0; i < 4; i++) set(d, 8, 12 + i, 232, 218, 176);
+  });
+
+  // 远影：几乎吞掉光的黑，用来拼一个不该被看清的轮廓。
+  tile('shade', (d, rng) => {
+    fill(d, [7, 8, 10]);
+    for (let i = 0; i < 20; i++) {
+      const x = (rng() * 16) | 0, y = (rng() * 16) | 0;
+      set(d, x, y, 15, 16, 19);
+    }
+    for (let i = 0; i < 16; i++) set(d, i, 15, 4, 4, 6);
+  });
+
   /* ---------- 合成图集 ---------- */
   const atlas = document.createElement('canvas');
   atlas.width = atlas.height = SIZE;
@@ -644,7 +744,8 @@
         SPRUCE_LOG = 23, SPRUCE_LEAVES = 24, BIRCH_LOG = 25, BIRCH_LEAVES = 26,
         CHERRY_LOG = 27, CHERRY_LEAVES = 28, CHERRY_PLANKS = 29, PINK_PETALS = 30,
         RED_SAND = 31, TERRACOTTA = 32, ORANGE_TERRACOTTA = 33,
-        YELLOW_TERRACOTTA = 34, WHITE_TERRACOTTA = 35, MOSS = 36, CLAY = 37, DRIPSTONE = 38, TORCH = 39;
+        YELLOW_TERRACOTTA = 34, WHITE_TERRACOTTA = 35, MOSS = 36, CLAY = 37, DRIPSTONE = 38, TORCH = 39,
+        STONE_SWORD = 40, TABLET = 41, GLITCH = 42, BANNER = 43;
 
   const DEFS = [
     { name: '空气' },
@@ -686,7 +787,11 @@
     { name: '苔藓块', solid: 1, opaque: 1, tex: { all: 'moss' } },
     { name: '黏土', solid: 1, opaque: 1, tex: { all: 'clay' } },
     { name: '滴水石块', solid: 1, opaque: 1, tex: { all: 'dripstone' } },
-    { name: '火把', solid: 0, opaque: 0, light: 14, tex: { top: 'torch_top', side: 'torch_side', bottom: 'torch_side' } }
+    { name: '火把', solid: 0, opaque: 0, light: 14, tex: { top: 'torch_top', side: 'torch_side', bottom: 'torch_side' } },
+    { name: '石中剑', solid: 1, opaque: 1, tex: { top: 'sword_stone_top', side: 'sword_stone_side', bottom: 'sword_stone_side' } },
+    { name: '石碑', solid: 1, opaque: 1, tex: { all: 'tablet' } },
+    { name: '丢失的贴图', solid: 1, opaque: 1, tex: { all: 'glitch' } },
+    { name: '旗帜', solid: 1, opaque: 1, tex: { all: 'banner' } }
   ];
 
   const BLOCKS = DEFS.map((d, id) => {
@@ -761,7 +866,8 @@
     AIR, GRASS, DIRT, STONE, COBBLE, SAND, WATER, LOG, LEAVES, PLANKS, GLASS, BRICK, SNOW, BEDROCK,
     COAL_ORE, IRON_ORE, GOLD_ORE, DIAMOND_ORE, REDSTONE_ORE, TABLE, WOOL, CACTUS, ICE, SPRUCE_LOG, SPRUCE_LEAVES, BIRCH_LOG, BIRCH_LEAVES,
     CHERRY_LOG, CHERRY_LEAVES, CHERRY_PLANKS, PINK_PETALS, RED_SAND, TERRACOTTA, ORANGE_TERRACOTTA,
-    YELLOW_TERRACOTTA, WHITE_TERRACOTTA, MOSS, CLAY, DRIPSTONE, TORCH
+    YELLOW_TERRACOTTA, WHITE_TERRACOTTA, MOSS, CLAY, DRIPSTONE, TORCH,
+    STONE_SWORD, TABLET, GLITCH, BANNER
   };
   MC.MOB_TILES = {
     wool: tileIndex.wool,
@@ -821,7 +927,12 @@
     36: { hard: 0.1, tool: 'hoe' },
     37: { hard: 0.6, tool: 'shovel' },
     38: { hard: 1.5, tool: 'pickaxe' },
-    39: { hard: 0.1, tool: null }
+    39: { hard: 0.1, tool: null },
+    // 石碑、石中剑和丢失的贴图是世界的注脚，不允许被挖掉。
+    40: { hard: -1 },
+    41: { hard: -1 },
+    42: { hard: -1 },
+    43: { hard: 0.2, tool: 'axe' }
   };
   MC.MINE = MINE;
 
@@ -831,5 +942,6 @@
                   SPRUCE_LOG, SPRUCE_LEAVES, BIRCH_LOG, BIRCH_LEAVES,
                   CHERRY_LOG, CHERRY_LEAVES, CHERRY_PLANKS, PINK_PETALS, RED_SAND,
                   TERRACOTTA, ORANGE_TERRACOTTA, YELLOW_TERRACOTTA, WHITE_TERRACOTTA,
-                  MOSS, CLAY, DRIPSTONE, TORCH];
+                  MOSS, CLAY, DRIPSTONE, TORCH, BANNER];
+  MC.BLOCK_IDS = { STONE_SWORD, TABLET, GLITCH, BANNER };
 })();

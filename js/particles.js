@@ -83,7 +83,7 @@ void main() {
       }
     }
 
-    emit(x, y, z, vx, vy, vz, size, life, tile, r, g, b) {
+    emit(x, y, z, vx, vy, vz, size, life, tile, r, g, b, gravity) {
       if (!this.enabled || this.activeCount >= LIMIT) return false;
       for (let n = 0; n < LIMIT; n++) {
         const i = (this.cursor + n) % LIMIT, p = this.pool[i];
@@ -93,6 +93,7 @@ void main() {
         p.x = x; p.y = y; p.z = z;
         p.vx = vx; p.vy = vy; p.vz = vz;
         p.size = size; p.life = life; p.maxLife = life;
+        p.gravity = gravity === undefined ? 1 : gravity;
         p.uv = MC.Atlas.uv(tile); p.r = r; p.g = g; p.b = b;
         this.activeCount++;
         return true;
@@ -126,7 +127,7 @@ void main() {
       for (const p of this.pool) {
         if (!p.alive) continue;
         p.life -= step;
-        p.vy -= 8.5 * step;
+        p.vy -= 8.5 * step * (p.gravity === undefined ? 1 : p.gravity);
         p.x += p.vx * step; p.y += p.vy * step; p.z += p.vz * step;
         if (p.life <= 0 || p.y < 0 || MC.Block.isSolid(world.getBlock(
           Math.floor(p.x), Math.floor(p.y - p.size * 0.4), Math.floor(p.z)))) {

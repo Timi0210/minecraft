@@ -306,7 +306,10 @@
         }
       }
       const flash = this.dying ? 1 : this.hurtTime > 0 ? 0.8 : 0;
-      for (let i = first; i < out.length; i++) out[i].flash = flash;
+      for (let i = first; i < out.length; i++) {
+        out[i].flash = flash;
+        if (this.moonlit) out[i].glow = 1;
+      }
     }
   }
 
