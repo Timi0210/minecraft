@@ -1,0 +1,194 @@
+/* 栖野 / Field Notes：让世界留在画面中央，操作停靠在边缘。 */
+:root {
+  --field-ink: #10292b;
+  --field-glass: rgba(13, 34, 35, .72);
+  --field-paper: #f6f1e4;
+  --field-muted: #c7d3c6;
+  --field-gold: #efd29a;
+  --field-line: rgba(246, 242, 223, .26);
+}
+body { color: var(--field-paper); }
+button, select, summary { -webkit-tap-highlight-color: transparent; }
+button:focus-visible, summary:focus-visible, .slot:focus-visible { outline: 2px solid var(--field-gold); outline-offset: 3px; }
+#vignette { background: radial-gradient(ellipse at 50% 48%, transparent 60%, rgba(5, 18, 23, .25) 100%); }
+#crosshair { width: 15px; height: 15px; margin: -7.5px 0 0 -7.5px; }
+#crosshair::before { left: 7px; height: 15px; }
+#crosshair::after { top: 7px; width: 15px; }
+
+/* 入口像一本摊开的旅行手记，右侧仍可看见实时风景。 */
+#overlay {
+  justify-content: flex-start;
+  padding: clamp(14px, 3vw, 46px);
+  background: linear-gradient(90deg, rgba(5, 19, 23, .72), rgba(5, 19, 23, .35) 50%, rgba(5, 19, 23, .08));
+  backdrop-filter: none;
+}
+.panel {
+  width: min(610px, 100%);
+  max-height: calc(100dvh - clamp(28px, 6vw, 92px));
+  border: 1px solid rgba(255, 246, 218, .3);
+  border-radius: 26px;
+  background: linear-gradient(155deg, rgba(17, 42, 43, .91), rgba(10, 30, 32, .91));
+  box-shadow: 0 28px 90px rgba(0, 15, 19, .4), inset 0 1px 0 rgba(255, 255, 255, .11);
+  backdrop-filter: blur(17px) saturate(1.12);
+  text-align: left;
+  overflow-y: auto;
+  scrollbar-color: rgba(246, 242, 223, .28) transparent;
+}
+.panel::before { display: none; }
+.panelTop, .panelFoot { padding: 17px clamp(23px, 3vw, 37px); }
+.panelTop { border-bottom: 1px solid var(--field-line); font-size: 10px; letter-spacing: .16em; }
+.panelTop .markCube { width: 25px; height: 25px; border-radius: 50%; font-size: 18px; background: var(--field-gold); }
+.panelTop .seed { font: 600 10px/1.3 "SF Mono", monospace; letter-spacing: .02em; opacity: .7; }
+.heroGrid { display: block; min-height: 0; }
+.heroContent { padding: clamp(35px, 6vh, 58px) clamp(24px, 4vw, 48px) 27px; }
+.eyebrow { color: var(--field-gold); font: 750 10px/1.3 "SF Mono", monospace; letter-spacing: .21em; }
+.logo { margin: 13px 0 0; font: 750 clamp(74px, 8vw, 104px)/1.02 "Songti SC", "Noto Serif CJK SC", serif; letter-spacing: -.09em; color: var(--field-paper); text-shadow: 0 12px 34px rgba(0, 0, 0, .22); }
+.logo.small { font-size: clamp(44px, 6vw, 66px); }
+.sub { margin-top: 9px; color: #efe4c8; font-size: clamp(15px, 2vw, 19px); font-weight: 600; letter-spacing: .08em; }
+.heroLead { max-width: 480px; margin-top: 23px; color: var(--field-muted); font-size: 13px; line-height: 1.85; }
+#loadbox { max-width: 100%; margin-top: 24px; }
+.bar { border-radius: 99px; }
+#barFill { background: linear-gradient(90deg, #a3bea5, var(--field-gold)); }
+#primary { display: block; width: 100%; margin-top: 22px; padding: 18px 20px; border: 1px solid #ffe5ab; border-radius: 13px; color: #163434; background: linear-gradient(120deg, #f7e4b7, #dfbd7f); font-size: 16px; letter-spacing: .08em; text-align: center; box-shadow: 0 11px 26px rgba(4, 18, 19, .2); }
+#primary:hover:not(:disabled) { background: #ffe9ba; color: #10292b; box-shadow: 0 11px 26px rgba(4, 18, 19, .2), 0 0 0 3px rgba(255, 229, 171, .17); }
+#metaRow { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 7px; margin-top: 13px; }
+#metaRow .btn.ghost { min-width: 0; min-height: 37px; margin: 0; padding: 7px 6px; border-color: var(--field-line); border-radius: 9px; background: rgba(255, 255, 255, .05); color: #e0e8dc; font-size: 10px; letter-spacing: 0; text-align: center; }
+#metaRow .btn.ghost:hover { background: rgba(255, 255, 255, .14); }
+.deviceHint { margin-top: 11px; font-size: 10px; color: #aabfb4; }
+.graphicsSettings { margin-top: 23px; padding-top: 14px; border-top-color: var(--field-line); }
+.graphicsSettings summary { color: #f0ecdd; }
+.graphicsSettings summary span { color: #b3c9b7; }
+.graphicsGrid select { border-radius: 9px; background: #f9f5e9; }
+.heroAside { display: block; padding: 18px clamp(24px, 4vw, 48px) 21px; border: 0; border-top: 1px solid var(--field-line); background: rgba(255, 255, 255, .025); }
+.asideLabel { color: #d5c18e; font: 700 9px/1.3 "SF Mono", monospace; letter-spacing: .15em; }
+.studioSteps { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin: 12px 0 0; }
+.studioSteps > div { display: flex; flex-direction: column; gap: 5px; min-width: 0; padding: 11px 12px; border-color: rgba(246, 242, 223, .16); border-radius: 11px; background: rgba(255, 255, 255, .035); }
+.studioSteps b { color: var(--field-gold); font-size: 10px; }
+.studioSteps strong { font-size: 12px; }
+.studioSteps span { color: #b7c9c1; font-size: 10px; line-height: 1.5; }
+.asideQuote { display: none; }
+.panelFoot { color: #b7c7bc; font-size: 10px; }
+.controlsDisclosure summary { color: #f3d99e; }
+.panelFoot { flex-wrap: wrap; }
+.controlsDisclosure[open] { width: 100%; }
+.controlsDisclosure[open] .controls { position: static; width: 100%; margin-top: 12px; }
+
+/* 电脑：左上角是地点，右侧只留地图与窄工具列。 */
+#hud { left: 22px; top: 20px; z-index: 6; text-shadow: 0 2px 14px rgba(0, 0, 0, .54); }
+.worldMark { font: 700 20px/1.1 "Songti SC", serif; letter-spacing: .05em; }
+.worldMark .markCube { width: 30px; height: 30px; margin-right: 9px; border-radius: 50%; font-size: 19px; }
+.worldMark small { color: #e3e7d3; font-size: 8px; letter-spacing: .16em; }
+.placeLine { display: inline-flex; gap: 9px; margin: 13px 0 0; padding: 7px 11px; border: 1px solid rgba(255, 255, 255, .25); border-radius: 99px; background: rgba(12, 34, 37, .54); backdrop-filter: blur(8px); font-size: 11px; }
+.placeLine b { color: #fff8e8; font-size: 12px; }
+.placeLine span { color: #d2dfd0; }
+#mapControl { position: fixed; right: 20px; top: 20px; z-index: 10; width: 152px; opacity: 0; pointer-events: none; transition: opacity .2s; }
+body.is-playing #mapControl { opacity: 1; pointer-events: auto; }
+#mapToggle { display: flex; align-items: center; justify-content: space-between; gap: 4px; width: 100%; height: 37px; padding: 0 10px; border: 1px solid rgba(247, 240, 213, .38); border-radius: 11px; background: var(--field-glass); color: var(--field-paper); backdrop-filter: blur(12px); box-shadow: 0 7px 20px rgba(0, 0, 0, .15); font: 700 11px/1 sans-serif; cursor: pointer; }
+#mapToggle > span { color: var(--field-gold); font-size: 20px; }
+#mapToggle kbd { margin-left: auto; font-size: 9px; background: rgba(255, 255, 255, .08); }
+#mapToggle:hover { background: rgba(32, 68, 65, .9); }
+#miniMapWrap, body.touch-mode #miniMapWrap { position: static; width: 100%; margin: 7px 0 0; padding: 9px; border: 1px solid rgba(247, 240, 213, .34); border-radius: 12px; background: var(--field-glass); box-shadow: 0 9px 26px rgba(0, 0, 0, .17); backdrop-filter: blur(12px); }
+#miniMapWrap.hide { display: none; }
+body.touch-mode #miniMapWrap:not(.hide) { display: block; }
+.miniMapTitle { display: flex; justify-content: space-between; gap: 2px; margin: 0 0 7px; font-size: 9px; letter-spacing: .03em; }
+.miniMapTitle span { font: 600 7px/1.2 "SF Mono", monospace; letter-spacing: 0; opacity: .68; }
+#miniMap, body.touch-mode #miniMap { display: block; width: 100%; border: 0; border-radius: 7px; }
+#sceneDock { top: 50%; right: 20px; transform: translateY(-50%); gap: 7px; }
+#sceneDock button { width: 64px; min-width: 64px; min-height: 55px; flex-direction: column; justify-content: center; gap: 1px; padding: 5px 2px; border-color: rgba(247, 240, 213, .36); border-radius: 12px; background: var(--field-glass); color: var(--field-paper); font-size: 10px; line-height: 1.15; box-shadow: 0 8px 22px rgba(0, 0, 0, .16); }
+#sceneDock button span { font-size: 21px; color: var(--field-gold); }
+#sceneDock button kbd { display: none; }
+#sceneDock button:hover { transform: translateX(-3px); background: rgba(32, 68, 65, .9); }
+#hint { left: 22px; bottom: 27px; max-width: none; gap: 7px; font-size: 10px; }
+#hint span { padding: 5px 7px 5px 4px; border: 1px solid rgba(255, 255, 255, .2); border-radius: 7px; background: rgba(11, 33, 36, .46); backdrop-filter: blur(8px); }
+#hint kbd { border: 0; border-radius: 5px; color: var(--field-gold); background: transparent; }
+#hotbar { bottom: 20px; gap: 3px; padding: 5px; border-color: rgba(255, 247, 218, .42); border-radius: 17px; background: rgba(11, 32, 35, .7); box-shadow: 0 14px 36px rgba(0, 0, 0, .25); backdrop-filter: blur(15px); }
+#hotbar .slot { width: clamp(39px, 4.1vw, 51px); height: clamp(39px, 4.1vw, 51px); border: 1px solid rgba(255, 255, 255, .14); border-radius: 11px; background: rgba(255, 255, 255, .06); box-shadow: none; }
+#hotbar .slot.sel { transform: translateY(-3px); border-color: var(--field-gold); background: rgba(239, 210, 154, .22); box-shadow: 0 0 0 2px rgba(239, 210, 154, .21); }
+#hotbar .slot canvas { width: 82% !important; height: 82% !important; }
+#hotbar .slot .num { left: 5px; top: 3px; color: #dfdbc9; font-size: 9px; }
+#itemName { bottom: 91px; }
+#toast { border-radius: 99px; border-color: rgba(239, 210, 154, .55); background: rgba(14, 40, 42, .88); }
+body.photo-active #mapControl { opacity: 0 !important; pointer-events: none !important; }
+
+/* 素材和相册像两张可以翻看的纸页。 */
+.studioModal { background: rgba(6, 22, 25, .66); }
+.studioSheet { border-radius: 24px; background: #f7f3e8; box-shadow: 0 30px 100px rgba(2, 15, 19, .42); }
+.sheetHead { padding: 25px 29px 18px; }
+.sheetHead small { color: #a37d40; letter-spacing: .18em; }
+.sheetHead h2 { color: #173a37; font-weight: 700; }
+.sheetHead button { border-radius: 10px; }
+.paletteTabs button.sel { background: #204d49; border-color: #204d49; }
+.landscapeItem { border-radius: 13px; }
+.landscapeItem:hover, .landscapeItem:focus-visible { border-color: #7f9f91; background: #edf1e8; }
+.photoTop button { border-radius: 11px; background: rgba(14, 43, 46, .73); }
+#photoShutter { background: rgba(14, 43, 46, .58); }
+
+/* 手机：拇指区与顶部轻工具区各司其职。 */
+body.touch-mode #hud { top: calc(12px + env(safe-area-inset-top, 0px)); left: max(12px, env(safe-area-inset-left, 0px)); }
+body.touch-mode .worldMark { font-size: 16px; }
+body.touch-mode .worldMark .markCube { width: 26px; height: 26px; font-size: 16px; }
+body.touch-mode .placeLine { margin-top: 8px; padding: 5px 8px; font-size: 9px; }
+body.touch-mode .placeLine b { font-size: 10px; }
+body.touch-mode #mapControl { top: calc(12px + env(safe-area-inset-top, 0px)); right: max(12px, env(safe-area-inset-right, 0px)); width: 126px; }
+body.touch-mode #mapToggle { height: 36px; font-size: 10px; }
+body.touch-mode #mapToggle kbd { display: none; }
+body.touch-mode #touchQuick { top: calc(59px + env(safe-area-inset-top, 0px)); right: max(12px, env(safe-area-inset-right, 0px)); flex-direction: row; gap: 5px; }
+body.touch-mode #touchQuick button { width: 39px; min-height: 39px; padding: 0; border-radius: 10px; background: var(--field-glass); color: var(--field-gold); font-size: 18px; }
+body.touch-mode #touchQuick button span { display: none; }
+body.touch-mode.map-open #touchQuick { opacity: 0; pointer-events: none; }
+body.touch-mode #stickBase { left: max(18px, env(safe-area-inset-left, 0px)); bottom: calc(86px + env(safe-area-inset-bottom, 0px)); width: 104px; height: 104px; border: 1px solid rgba(255, 248, 222, .48); background: rgba(18, 45, 47, .5); box-shadow: inset 0 0 0 12px rgba(255, 255, 255, .04), 0 9px 25px rgba(0, 0, 0, .18); }
+body.touch-mode #stickBase::before { border-style: solid; opacity: .6; }
+body.touch-mode #stickKnob { left: 29px; top: 29px; width: 46px; height: 46px; background: linear-gradient(145deg, #f7ecd0, #d5bb87); border-color: #fff6dd; }
+body.touch-mode #touchBtns { right: max(15px, env(safe-area-inset-right, 0px)); bottom: calc(84px + env(safe-area-inset-bottom, 0px)); width: 174px; height: 115px; display: grid; grid-template-columns: repeat(3, 52px); grid-template-rows: 44px 60px; justify-content: space-between; align-items: center; gap: 9px 3px; transform: none; }
+body.touch-mode .touchBtn, body.touch-mode .touchBtn.big { position: static; inset: auto; width: 52px; height: 44px; border: 1px solid rgba(255, 248, 222, .47); border-radius: 11px; background: var(--field-glass); box-shadow: 0 8px 20px rgba(0, 0, 0, .17); color: var(--field-paper); font-size: 18px; }
+body.touch-mode .touchBtn.big { height: 60px; border-radius: 15px; font-size: 23px; }
+body.touch-mode #touchMenu { grid-column: 1; grid-row: 1; }
+body.touch-mode #touchFly { grid-column: 2; grid-row: 1; }
+body.touch-mode #touchBag { grid-column: 3; grid-row: 1; }
+body.touch-mode #touchMine { grid-column: 1; grid-row: 2; }
+body.touch-mode #touchJump { grid-column: 2; grid-row: 2; }
+body.touch-mode #touchPlace { grid-column: 3; grid-row: 2; border-color: var(--field-gold); background: rgba(147, 99, 45, .77); }
+body.touch-mode #touchDown, body.touch-mode.flying #touchDown { position: absolute; right: 0; top: -53px; width: 52px; height: 44px; }
+body.touch-mode #touchDown.hide { display: none; }
+body.touch-mode #hotbar { bottom: calc(8px + env(safe-area-inset-bottom, 0px)); gap: 2px; padding: 4px; max-width: calc(100vw - 16px); }
+body.touch-mode #hotbar .slot { width: clamp(31px, 8.6vw, 39px); height: clamp(31px, 8.6vw, 39px); border-radius: 8px; }
+body.touch-mode #hotbar .slot .num { font-size: 7px; top: 2px; left: 3px; }
+body.touch-mode #touchHint { top: calc(112px + env(safe-area-inset-top, 0px)); bottom: auto; max-width: 70vw; border-color: var(--field-line); background: var(--field-glass); }
+
+@media (max-width: 760px) {
+  #overlay { justify-content: center; padding: 11px; background: rgba(5, 20, 24, .51); }
+  .panel { width: min(560px, calc(100vw - 22px)); max-height: calc(100dvh - 22px); border-radius: 22px; }
+  .panelTop, .panelFoot { padding: 13px 20px; }
+  .heroContent { padding: 29px 23px 22px; }
+  .logo { font-size: clamp(60px, 14vw, 82px); }
+  .heroLead { margin-top: 16px; font-size: 12px; }
+  .heroAside { display: none; }
+  #metaRow { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  #hud { left: 12px; top: 12px; }
+  #mapControl { right: 12px; top: 12px; }
+  #hint { display: none; }
+  .sheetHead { padding: 19px 20px 15px; }
+  .paletteTabs { padding: 12px 20px 7px; }
+  .landscapeGrid { padding: 13px 20px 21px; }
+}
+@media (max-height: 650px) and (min-width: 761px) {
+  #miniMapWrap { padding: 7px; }
+  #miniMap { width: 100%; }
+  #sceneDock { top: 190px; transform: none; gap: 4px; }
+  #sceneDock button { min-height: 44px; }
+}
+@media (max-height: 500px) {
+  .panel { max-height: calc(100dvh - 12px); }
+  .heroContent { padding-top: 18px; }
+  .heroLead { margin-top: 10px; }
+  body.touch-mode #touchBtns { bottom: calc(66px + env(safe-area-inset-bottom, 0px)); }
+  body.touch-mode #stickBase { bottom: calc(68px + env(safe-area-inset-bottom, 0px)); }
+  body.touch-mode #touchQuick { top: calc(58px + env(safe-area-inset-top, 0px)); }
+  body.touch-mode #touchHint { display: none; }
+  .photoFrame { inset: 11% 5% 25%; }
+}
+@media (max-width: 390px) {
+  body.touch-mode #touchBtns { right: max(9px, env(safe-area-inset-right, 0px)); }
+  body.touch-mode #stickBase { left: max(10px, env(safe-area-inset-left, 0px)); width: 92px; height: 92px; }
+  body.touch-mode #stickKnob { left: 25px; top: 25px; width: 40px; height: 40px; }
+}

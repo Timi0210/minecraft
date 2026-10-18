@@ -157,6 +157,7 @@
     if (Array.isArray(saved.inv)) state.bag = parseStacks(saved.inv, 27);
   }
   const minimap = new MC.Minimap(world, $('miniMapWrap'), $('miniMap'), state);
+  if (touchMode) minimap.toggle();
   let secrets = null;
   const keys = Object.create(null);
   const input = { forward: false, back: false, left: false, right: false,
@@ -466,7 +467,7 @@
     overlay.classList.remove('hide');
     titleEl.textContent = '栖野';
     titleEl.classList.remove('small');
-    subtitleEl.textContent = '把喜欢的风景，变成自己的世界';
+    subtitleEl.textContent = '走进风景，留下你的痕迹';
     loadbox.style.display = 'none';
     primary.textContent = '走进栖野 ↗';
     primary.disabled = false;
@@ -1476,7 +1477,7 @@
       const f = player.toggleFly();
       toast(f ? '飞行模式 开' : '飞行模式 关');
     } else if (e.code === 'KeyM') {
-      toast(minimap.toggle() ? '手绘地图 已展开' : '手绘地图 已收起');
+      toggleMap();
     } else if (e.code === 'KeyT') {
       e.preventDefault();
       cycleTime();
@@ -1761,6 +1762,19 @@
   bindTouchTap($('touchPhoto'), openPhoto);
   bindTouchTap($('touchGallery'), openGallery);
   bindTouchTap($('touchTime'), cycleTime);
+
+  function toggleMap() {
+    const shown = minimap.toggle();
+    const button = $('mapToggle');
+    button.setAttribute('aria-expanded', String(shown));
+    button.setAttribute('aria-label', shown ? '收起手绘地图' : '展开手绘地图');
+    document.body.classList.toggle('map-open', shown);
+    toast(shown ? '手绘地图 已展开' : '手绘地图 已收起');
+  }
+  $('mapToggle').setAttribute('aria-expanded', String(minimap.visible));
+  $('mapToggle').setAttribute('aria-label', minimap.visible ? '收起手绘地图' : '展开手绘地图');
+  document.body.classList.toggle('map-open', minimap.visible);
+  $('mapToggle').addEventListener('click', toggleMap);
 
   $('dockPalette').addEventListener('click', openInventory);
   $('dockPhoto').addEventListener('click', openPhoto);

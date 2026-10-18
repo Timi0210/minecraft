@@ -429,6 +429,7 @@
 </style>
 <link rel="stylesheet" href="css/redesign.css?v=9">
 <link rel="stylesheet" href="css/studio.css?v=1">
+<link rel="stylesheet" href="css/field-ui.css?v=1">
 </head>
 <body>
 <canvas id="game"></canvas>
@@ -441,13 +442,16 @@
   <div class="worldMark"><span class="markCube">✦</span><span>栖野<small>WILD STUDIO</small></span></div>
   <div class="placeLine"><b id="hMode">探索中</b><span id="hActivity">步行 · 12:00</span></div>
   <div id="debugStats"><b id="hPos">0 0 0</b> · <span id="hFps">0</span> fps · <span id="hChunks">0</span> 区块 · <span id="hTris">0</span> 面</div>
+</div>
+<div id="mapControl">
+  <button id="mapToggle" type="button" aria-label="收起手绘地图" aria-expanded="true" aria-controls="miniMapWrap"><span>⌖</span> 手绘地图 <kbd>M</kbd></button>
   <div id="miniMapWrap">
-    <div class="miniMapTitle">手绘地图 <span>M 隐藏</span></div>
+    <div class="miniMapTitle">走过的地方 <span>THE WORLD YOU KNOW</span></div>
     <canvas id="miniMap" aria-label="手绘地图，只显示走过的区域和玩家朝向"></canvas>
   </div>
 </div>
 <div id="hint">
-  <span><kbd>WASD</kbd> 漫游</span><span><kbd>鼠标</kbd> 布置风景</span><span><kbd>Tab</kbd> 点击工具</span><span><kbd>E</kbd> 素材</span><span><kbd>P</kbd> 拍照</span><span><kbd>G</kbd> 相册</span>
+  <span><kbd>WASD</kbd> 漫游</span><span><kbd>鼠标</kbd> 环顾与造景</span><span><kbd>Tab</kbd> 点击工具</span>
 </div>
 <div id="sceneDock" aria-label="景观工具">
   <button id="dockPalette" type="button"><span>▦</span> 素材 <kbd>E</kbd></button>
@@ -478,7 +482,7 @@
     <button id="touchGallery" type="button" aria-label="相册">▤ <span>相册</span></button>
     <button id="touchTime" type="button" aria-label="切换时段">☀ <span>时光</span></button>
   </div>
-  <div id="touchHint">左手移动 · 右手看风景 · ▣ 放置 · ⛏ 拆除 · ◎ 拍照</div>
+  <div id="touchHint">左手移动 · 右手环顾 · 右下角建造</div>
 </div>
 
 <div id="overlay">
@@ -486,10 +490,10 @@
     <div class="panelTop"><span><span class="markCube">✦</span> 栖野 / WILD STUDIO</span><span class="seed" id="seedLabel"></span></div>
     <div class="heroGrid">
       <section class="heroContent">
-        <div class="eyebrow">漫游 · 造景 · 留影</div>
+        <div class="eyebrow">A WORLD TO WANDER · 01</div>
         <div class="logo" id="title">栖野</div>
-        <div class="sub" id="subtitle">把喜欢的风景，变成自己的世界</div>
-        <p class="heroLead">翻过山，看一场日落。在湖边搭起小屋，换一种光，再给此刻拍张照片。这里没有任务和等级，只有你想留下的风景。</p>
+        <div class="sub" id="subtitle">走进风景，留下你的痕迹</div>
+        <p class="heroLead">去雪谷听风，在树林里找一块空地。用方块搭起喜欢的角落，再把某一刻的光留在相册里。</p>
         <div id="loadbox"><div class="bar"><i id="barFill"></i></div><div id="loadText">正在生成世界…</div></div>
         <button class="btn" id="primary" disabled>正在铺开风景…</button>
         <div class="row" id="metaRow">
@@ -511,11 +515,11 @@
         </details>
       </section>
       <aside class="heroAside" aria-label="玩法介绍">
-        <div class="asideLabel">你的世界，从一个念头开始</div>
+        <div class="asideLabel">WANDER · MAKE · REMEMBER</div>
         <div class="studioSteps">
-          <div><b>01</b><strong>去走走</strong><span>森林、雪山、海岸和昼夜，会给你不同的灵感。</span></div>
-          <div><b>02</b><strong>布置一处角落</strong><span>素材随取随用。铺路、搭屋、点灯，都由你决定。</span></div>
-          <div><b>03</b><strong>留住这一刻</strong><span>调整时光，按下快门，把风景放进相册。</span></div>
+          <div><b>01</b><strong>随风漫游</strong><span>翻过山脊，遇见新的地平线。</span></div>
+          <div><b>02</b><strong>随手造景</strong><span>选喜欢的材料，布置一处角落。</span></div>
+          <div><b>03</b><strong>留下此刻</strong><span>换一道光，拍下你的风景。</span></div>
         </div>
         <div class="asideQuote">“世界很大，<br>先在喜欢的地方停下。”</div>
       </aside>
@@ -628,6 +632,6 @@
 <script src="js/minimap.js?v=64"></script>
 <script src="js/secrets.js?v=5"></script>
 <script src="js/settings.js?v=3"></script>
-<script src="js/main.js?v=72"></script>
+<script src="js/main.js?v=73"></script>
 </body>
 </html>
