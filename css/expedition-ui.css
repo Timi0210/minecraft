@@ -1,0 +1,119 @@
+/* 栖野 / Expedition — 地图边框、工具轨与双世界主题。 */
+:root { --exp-paper:#f7efe0; --exp-ink:#172d31; --exp-gold:#f0c57e; --exp-glass:rgba(19,36,41,.79); --exp-line:rgba(246,231,198,.28); }
+body { color:var(--exp-paper); }
+#vignette { background:radial-gradient(ellipse at 50% 46%, transparent 54%, rgba(7,18,23,.32) 100%); }
+#hud { top:22px; left:25px; display:flex; align-items:center; gap:15px; }
+.worldMark { display:flex; align-items:center; padding:7px 13px 7px 8px; border:1px solid var(--exp-line); border-radius:14px; background:var(--exp-glass); box-shadow:0 9px 25px rgba(0,0,0,.2); backdrop-filter:blur(10px); font:700 18px/1.04 "Songti SC",serif; }
+.worldMark .markCube { display:grid; place-items:center; width:34px; height:34px; margin-right:9px; border-radius:10px; color:#20343a; background:linear-gradient(140deg,#ffe1a4,#c48f53); box-shadow:inset 0 1px 0 #fff1cf; }
+.worldMark small { display:block; margin-top:4px; color:#d7cab2; font:700 7px/1 sans-serif; letter-spacing:.2em; }
+.placeLine { display:flex; align-items:center; gap:9px; margin:0; padding:11px 15px; border:1px solid var(--exp-line); border-radius:12px; background:var(--exp-glass); box-shadow:0 9px 25px rgba(0,0,0,.15); backdrop-filter:blur(10px); font-size:11px; }
+.placeDot { display:block; width:7px; height:7px; border-radius:50%; background:#bde0b8; box-shadow:0 0 0 4px rgba(189,224,184,.13); }
+.placeDivider { width:1px; height:14px; background:var(--exp-line); }
+.placeLine b { font-size:12px; }
+#mapControl { right:22px; top:22px; width:174px; }
+#mapToggle { height:42px; padding:0 13px; border-radius:12px; background:var(--exp-glass); box-shadow:0 9px 25px rgba(0,0,0,.2); }
+#miniMapWrap, body.touch-mode #miniMapWrap { border-radius:12px; background:var(--exp-glass); }
+#sceneDock { left:22px; right:auto; top:50%; transform:translateY(-50%); display:flex; flex-direction:column; gap:6px; padding:6px; border:1px solid var(--exp-line); border-radius:17px; background:rgba(19,36,41,.63); backdrop-filter:blur(12px); box-shadow:0 13px 35px rgba(0,0,0,.22); }
+#sceneDock button { display:flex; flex-direction:column; width:55px; min-width:55px; height:56px; min-height:56px; border:0; border-radius:11px; background:transparent; box-shadow:none; font-size:9px; }
+#sceneDock button span { font-size:21px; }
+#sceneDock button:hover { transform:none; background:rgba(240,197,126,.17); }
+#hint { left:24px; bottom:24px; display:flex; flex-wrap:wrap; max-width:340px; }
+#hint span { border-color:var(--exp-line); background:var(--exp-glass); border-radius:8px; }
+#hotbar { bottom:23px; padding:7px; border:1px solid rgba(255,235,196,.49); border-radius:16px; background:var(--exp-glass); backdrop-filter:blur(14px); box-shadow:0 14px 40px rgba(0,0,0,.32); }
+#hotbar .slot { width:clamp(42px,4.2vw,55px); height:clamp(42px,4.2vw,55px); border-radius:9px; background:linear-gradient(145deg,rgba(255,255,255,.12),rgba(255,255,255,.03)); }
+#hotbar .slot.sel { border-color:#ffdc9d; background:linear-gradient(145deg,rgba(240,197,126,.36),rgba(178,127,72,.19)); box-shadow:inset 0 0 0 1px rgba(255,231,180,.25),0 0 0 2px rgba(240,197,126,.17); }
+#itemName { bottom:101px; }
+#nearbyAction { position:fixed; left:50%; bottom:113px; z-index:11; display:flex; align-items:center; gap:12px; min-width:230px; padding:10px 11px; transform:translateX(-50%); border:1px solid #f7d9a1; border-radius:14px; color:#ffefcf; background:rgba(25,38,42,.93); box-shadow:0 13px 34px rgba(0,0,0,.32); backdrop-filter:blur(12px); text-align:left; cursor:pointer; }
+#nearbyAction.hide { display:none; }
+#nearbyAction .actionSymbol { display:grid; place-items:center; flex:none; width:36px; height:36px; border-radius:10px; color:#24373a; background:#f0c57e; font-size:20px; }
+#nearbyAction strong, #nearbyAction small { display:block; white-space:nowrap; }
+#nearbyAction strong { font-size:12px; }
+#nearbyAction small { margin-top:4px; color:#b9c7bf; font-size:9px; }
+#nearbyAction kbd { margin-left:auto; padding:5px 7px; border:1px solid var(--exp-line); border-radius:7px; color:var(--exp-gold); font-size:10px; }
+#nearbyAction:hover { background:rgba(43,59,57,.97); }
+
+/* 菜单改成探险手册首页，一侧叙事，一侧出发信息。 */
+#overlay { justify-content:center; align-items:center; padding:clamp(13px,3vw,32px); background:linear-gradient(110deg,rgba(8,21,27,.76),rgba(8,21,27,.35)); }
+.panel { width:min(990px,96vw); max-height:calc(100dvh - 30px); border:1px solid rgba(255,235,196,.44); border-radius:22px; background:linear-gradient(132deg,rgba(21,44,47,.96),rgba(12,29,35,.95)); box-shadow:0 30px 90px rgba(0,0,0,.4); backdrop-filter:blur(15px); }
+.panelTop { padding:17px 26px; }
+.heroGrid { display:grid; grid-template-columns:minmax(0,1.3fr) minmax(235px,.7fr); }
+.heroContent { padding:42px clamp(28px,4vw,55px) 37px; }
+.eyebrow { color:var(--exp-gold); }
+.logo { font-size:clamp(76px,8vw,112px); color:#fff6df; -webkit-text-stroke:0; text-shadow:0 8px 24px rgba(0,0,0,.25); }
+.heroLead { max-width:480px; color:#d9ded2; }
+.heroAside { display:flex; flex-direction:column; justify-content:center; padding:34px 28px; border:0; border-left:1px solid var(--exp-line); background:rgba(247,239,224,.045); }
+.studioSteps { grid-template-columns:1fr; gap:12px; margin-top:18px; }
+.studioSteps > div { display:grid; grid-template-columns:32px 1fr; column-gap:9px; padding:13px; }
+.studioSteps b { grid-row:1/3; align-self:center; font-size:14px; }
+.studioSteps strong { font-size:13px; }
+.studioSteps span { grid-column:2; }
+#primary { border-radius:10px; }
+.panelFoot { padding:16px 26px; border-top:1px solid var(--exp-line); }
+.studioSheet,.invPanel,.craftPanel { border-radius:18px; }
+
+/* 可实际取用的补给箱。 */
+#loot { position:fixed; inset:0; z-index:35; display:flex; align-items:center; justify-content:center; padding:16px; background:rgba(5,15,19,.72); backdrop-filter:blur(9px); }
+#loot.hide { display:none; }
+.lootPanel { width:min(480px,94vw); padding:28px; border:1px solid rgba(255,228,181,.6); border-radius:19px; background:linear-gradient(150deg,#243e42,#152b30); box-shadow:0 25px 70px rgba(0,0,0,.45); }
+.lootEyebrow { color:#f0c57e; font:700 10px/1.3 monospace; letter-spacing:.17em; }
+.lootPanel h2 { margin:8px 0 7px; color:#fff0cf; font:700 29px/1.2 "Songti SC",serif; }
+.lootPanel p { margin:0 0 18px; color:#c9d4ca; font-size:12px; line-height:1.7; }
+.lootItems { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:8px; }
+.lootItem { min-height:91px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:3px; border:1px solid rgba(255,231,193,.22); border-radius:11px; background:rgba(255,255,255,.06); text-align:center; font-size:10px; }
+.lootItem canvas { width:40px; height:40px; }
+.lootItem b { color:#f0c57e; }
+.lootActions { display:flex; gap:9px; margin-top:20px; }
+.lootActions button { flex:1; min-height:43px; border:1px solid rgba(255,226,176,.55); border-radius:10px; color:#162d31; background:#f0c57e; font:700 12px/1 sans-serif; cursor:pointer; }
+.lootActions button:last-child { color:#e3e9dc; background:transparent; border-color:rgba(255,255,255,.23); }
+.lootActions button:disabled { opacity:.5; cursor:default; }
+#travelCurtain { position:fixed; inset:0; z-index:50; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:14px; color:#f5cfac; background:radial-gradient(circle at 50% 45%,#512735,#170f1b 75%); transition:opacity .35s; }
+#travelCurtain.hide { display:none; }
+#travelCurtain span { font-size:45px; color:#ec9bcb; text-shadow:0 0 28px #b850c6; }
+#travelCurtain strong { font:700 30px/1.2 "Songti SC",serif; letter-spacing:.13em; }
+#travelCurtain small { color:#c9a8b5; font-size:11px; letter-spacing:.12em; }
+
+body.in-nether { --exp-gold:#f4a78d; --exp-glass:rgba(45,22,29,.82); --exp-line:rgba(255,173,137,.32); }
+body.in-nether .worldMark .markCube,body.in-nether #nearbyAction .actionSymbol { color:#4a222d; background:linear-gradient(140deg,#ffc2a2,#df735b); }
+body.in-nether .placeDot { background:#ff886b; box-shadow:0 0 0 4px rgba(255,136,107,.15); }
+
+body.touch-mode #hud { top:calc(10px + env(safe-area-inset-top,0px)); left:max(10px,env(safe-area-inset-left,0px)); gap:7px; }
+body.touch-mode .worldMark { padding:5px 9px 5px 5px; font-size:15px; }
+body.touch-mode .worldMark .markCube { width:27px; height:27px; margin-right:6px; font-size:15px; }
+body.touch-mode .placeLine { padding:8px 9px; font-size:9px; }
+body.touch-mode #mapControl { top:calc(58px + env(safe-area-inset-top,0px)); right:max(10px,env(safe-area-inset-right,0px)); width:132px; }
+body.touch-mode #touchQuick { top:calc(101px + env(safe-area-inset-top,0px)); right:max(10px,env(safe-area-inset-right,0px)); }
+body.touch-mode #touchQuick button,body.touch-mode .touchBtn,body.touch-mode .touchBtn.big { background:var(--exp-glass); color:#f8dec0; }
+body.touch-mode #touchPlace { background:rgba(148,95,57,.86); }
+body.touch-mode #nearbyAction { bottom:calc(180px + env(safe-area-inset-bottom,0px)); min-width:0; padding:7px 9px; gap:8px; }
+body.touch-mode #nearbyAction .actionSymbol { width:29px; height:29px; font-size:16px; }
+body.touch-mode #nearbyAction strong { font-size:10px; }
+body.touch-mode #nearbyAction small,body.touch-mode #nearbyAction kbd { display:none; }
+body.touch-mode #hint { display:none; }
+
+@media (max-width:760px) {
+  .heroGrid { display:block; }
+  .heroAside { display:none; }
+  .heroContent { padding:30px 23px 25px; }
+  #hud { top:calc(11px + env(safe-area-inset-top,0px)); left:max(11px,env(safe-area-inset-left,0px)); gap:6px; }
+  .worldMark { padding:5px 8px 5px 5px; font-size:15px; }
+  .worldMark .markCube { width:27px; height:27px; margin-right:6px; font-size:15px; }
+  .worldMark small { font-size:6px; }
+  .placeLine { padding:8px 9px; font-size:9px; }
+  .placeLine b { font-size:10px; }
+  #mapControl { top:calc(55px + env(safe-area-inset-top,0px)); right:max(10px,env(safe-area-inset-right,0px)); width:132px; }
+  #mapToggle { height:33px; font-size:9px; }
+  #sceneDock,#hint { display:none; }
+  #nearbyAction { bottom:calc(180px + env(safe-area-inset-bottom,0px)); min-width:0; padding:7px 9px; gap:8px; }
+  #nearbyAction .actionSymbol { width:29px; height:29px; font-size:16px; }
+  #nearbyAction strong { font-size:10px; }
+  #nearbyAction small,#nearbyAction kbd { display:none; }
+  #hotbar { bottom:calc(8px + env(safe-area-inset-bottom,0px)); }
+  .lootPanel { padding:20px; }
+}
+@media (max-height:520px) and (min-width:761px) {
+  .heroContent { padding-top:20px; padding-bottom:20px; }
+  .logo { font-size:65px; }
+  .heroLead { margin-top:10px; }
+  .studioSteps { gap:5px; }
+  .studioSteps > div { padding:8px; }
+}

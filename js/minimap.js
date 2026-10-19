@@ -11,7 +11,8 @@
     beach: [218, 200, 144], desert: [220, 186, 119],
     plains: [104, 158, 82], forest: [56, 120, 78], taiga: [56, 111, 100],
     snow: [218, 232, 231], mountain: [128, 133, 130],
-    cherry: [205, 146, 172], badlands: [170, 99, 72]
+    cherry: [205, 146, 172], badlands: [170, 99, 72],
+    crimson: [153, 54, 69], warped: [48, 141, 136], basalt: [82, 76, 84], souls: [122, 107, 103]
   };
 
   class Minimap {
@@ -72,7 +73,7 @@
         const field = this.world.biomeField(x, z);
         const h = this.world.heightAt(x, z, field);
         const biome = this.world.biomeAt(x, z, h, field);
-        const color = h >= 82 ? COLORS.snow : (COLORS[biome] || COLORS.plains);
+        const color = h >= 82 && !(this.world.isNether && this.world.isNether(x, z)) ? COLORS.snow : (COLORS[biome] || COLORS.plains);
         const i = (py * 16 + px) * 4;
         preview.data[i] = color[0]; preview.data[i + 1] = color[1];
         preview.data[i + 2] = color[2]; preview.data[i + 3] = 255;
@@ -98,7 +99,7 @@
           const up = py ? this.heights[i - RES] : h;
           const shade = Math.max(0.67, Math.min(1.23,
             0.93 + (h - MC.WORLD.SEA) * 0.002 + (h - left + h - up) * 0.026));
-          const color = h >= 82 ? COLORS.snow : (COLORS[biome] || COLORS.plains);
+          const color = h >= 82 && !(this.world.isNether && this.world.isNether(x, z)) ? COLORS.snow : (COLORS[biome] || COLORS.plains);
           data[p] = Math.min(255, color[0] * shade);
           data[p + 1] = Math.min(255, color[1] * shade);
           data[p + 2] = Math.min(255, color[2] * shade);

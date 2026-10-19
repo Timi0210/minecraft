@@ -391,7 +391,10 @@
     else if (type === 'pig') {
       sfx.tone(240 + Math.random() * 35, 0.19, gain, 'square', 0.65);
       sfx.noise(520, 0.11, 1.1, gain * 0.4, 0.8);
-    } else if (type === 'rabbit') sfx.tone(690, 0.08, gain * 0.45, 'sine', 1.3);
+    } else if (type === 'rabbit' || type === 'frog') sfx.tone(type === 'frog' ? 410 : 690, 0.08, gain * 0.45, 'sine', 1.3);
+    else if (type === 'fox') sfx.tone(525, 0.12, gain * 0.5, 'triangle', 1.5);
+    else if (type === 'goat') sfx.baa(gain * 0.8);
+    else if (type === 'ember') sfx.tone(115, 0.28, gain * 0.75, 'sawtooth', 0.7);
   }
 
   /* ================= 启动画面 ================= */
@@ -929,6 +932,160 @@
     return count - rest;
   }
 
+  const nearbyAction = $('nearbyAction');
+  const nearbyActionTitle = $('nearbyActionTitle');
+  const nearbyActionHint = $('nearbyActionHint');
+  const lootEl = $('loot');
+  const lootItems = $('lootItems');
+  const lootTake = $('lootTake');
+  const travelCurtain = $('travelCurtain');
+  const SUPPLY = [
+    { id: MC.ITEM_KEY.bread, count: 6 },
+    { id: MC.ITEM_KEY.apple, count: 4 },
+    { id: MC.Block.TORCH, count: 16 },
+    { id: MC.ITEM_KEY.paper, count: 12 },
+    { id: MC.ITEM_KEY.iron_ingot, count: 8 },
+    { id: MC.Block.OBSIDIAN, count: 8 }
+  ];
+  let nearbyFeature = null;
+  let portalCooldown = 0;
+  let portalDwell = 0;
+
+  function nearFeature() {
+    const x = player.pos[0], y = player.pos[1], z = player.pos[2];
+    const p = world.isNether(x, z) ? world.netherExit : world.outpostPortal;
+    const px = p.x + 1.5, py = p.y + 1, pz = p.z + 0.5;
+    if ((x - px) ** 2 + (y - py) ** 2 + (z - pz) ** 2 < 5.4 ** 2) return 'portal';
+    if (!world.isNether(x, z)) {
+      const c = world.outpostChest;
+      if ((x - c.x - 0.5) ** 2 + (y - c.y) ** 2 + (z - c.z - 0.5) ** 2 < 4.2 ** 2) return 'chest';
+    }
+    return null;
+  }
+
+  function updateNearbyAction() {
+    const feature = state.mode === 'playing' ? nearFeature() : null;
+    if (feature === nearbyFeature) return;
+    nearbyFeature = feature;
+    nearbyAction.classList.toggle('hide', !feature);
+    if (!feature) return;
+    nearbyActionTitle.textContent = feature === 'portal' ?
+      (world.isNether(player.pos[0], player.pos[2]) ? '返回主世界' : '进入下界') : '打开雪谷补给箱';
+    nearbyActionHint.textContent = feature === 'portal' ? '穿越紫色传送门' : '查看屋里留下的物品';
+  }
+
+  function remainingSupply() {
+    const list = state.flags.outpostSupply;
+    return Array.isArray(list) && list.length === SUPPLY.length ?
+      SUPPLY.map((item, i) => Math.max(0, Math.min(item.count, Number(list[i]) || 0))) :
+      SUPPLY.map(item => item.count);
+  }
+
+  function renderSupply() {
+    const remains = remainingSupply();
+    lootItems.replaceChildren();
+    for (let i = 0; i < SUPPLY.length; i++) {
+      const item = SUPPLY[i], cell = document.createElement('div');
+      cell.className = 'lootItem';
+      const icon = document.createElement('canvas');
+      MC.itemIcon(icon, item.id, 64);
+      const name = document.createElement('span');
+      name.textContent = MC.itemName(item.id);
+      const count = document.createElement('b');
+      count.textContent = remains[i] ? '× ' + remains[i] : '已收下';
+      cell.append(icon, name, count);
+      lootItems.appendChild(cell);
+    }
+    lootTake.disabled = !remains.some(Boolean);
+    lootTake.textContent = lootTake.disabled ? '物品已收下' : '收下物品';
+  }
+
+  function openSupply() {
+    if (state.mode !== 'playing') return;
+    state.mode = 'loot';
+    state.mouseDown[0] = state.mouseDown[1] = false;
+    renderSupply();
+    lootEl.classList.remove('hide');
+    if (document.pointerLockElement) document.exitPointerLock();
+    syncTouchUI();
+  }
+
+  function closeSupply(relock) {
+    if (state.mode !== 'loot') return;
+    state.mode = 'playing';
+    lootEl.classList.add('hide');
+    syncTouchUI();
+    if (relock) requestLock();
+  }
+
+  function takeSupply() {
+    const remains = remainingSupply();
+    let received = 0;
+    for (let i = 0; i < SUPPLY.length; i++) {
+      const got = addToBag(SUPPLY[i].id, remains[i]);
+      remains[i] -= got;
+      received += got;
+    }
+    state.flags.outpostSupply = remains;
+    dirtySave = true;
+    renderSupply();
+    toast(received ? '补给已放入背包' : '背包已满');
+    saveWorld(true);
+  }
+
+  function travelPortal() {
+    if (state.mode !== 'playing' || portalCooldown > 0) return;
+    const goingDown = !world.isNether(player.pos[0], player.pos[2]);
+    const dest = goingDown ? world.netherExit : world.outpostPortal;
+    state.mode = 'travel';
+    nearbyFeature = null;
+    nearbyAction.classList.add('hide');
+    state.mouseDown[0] = state.mouseDown[1] = false;
+    portalDwell = 0;
+    $('travelTitle').textContent = goingDown ? '进入下界' : '返回主世界';
+    travelCurtain.classList.remove('hide');
+    if (document.pointerLockElement) document.exitPointerLock();
+    syncTouchUI();
+    const cx = Math.floor(dest.x / 16), cz = Math.floor(dest.z / 16);
+    const offsets = [[0, 0], [1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [-1, 1], [1, -1], [-1, -1]];
+    let index = 0;
+    const loadNext = () => {
+      if (index < offsets.length) {
+        const [dx, dz] = offsets[index++];
+        world.ensureChunk(cx + dx, cz + dz);
+        requestAnimationFrame(loadNext);
+        return;
+      }
+      player.pos[0] = dest.x + 1.5;
+      player.pos[1] = goingDown ? dest.y : dest.y;
+      player.pos[2] = dest.z + 3.5;
+      player.vel.fill(0);
+      player.yaw = Math.PI;
+      mobManager.mobs.length = 0;
+      portalCooldown = 2.8;
+      lastChunkX = 1e9; lastChunkZ = 1e9;
+      unloadFar();
+      state.mode = 'playing';
+      dirtySave = true;
+      saveWorld(true);
+      syncTouchUI();
+      setTimeout(() => { travelCurtain.classList.add('hide'); requestLock(); }, 300);
+      toast(goingDown ? '已抵达下界 · 小心熔岩' : '回到了栖野');
+    };
+    requestAnimationFrame(loadNext);
+  }
+
+  function useNearby() {
+    const feature = nearFeature();
+    if (feature === 'portal') travelPortal();
+    else if (feature === 'chest') openSupply();
+  }
+
+  nearbyAction.addEventListener('click', useNearby);
+  $('lootClose').addEventListener('click', () => closeSupply(true));
+  lootTake.addEventListener('click', takeSupply);
+  lootEl.addEventListener('click', e => { if (e.target === lootEl) closeSupply(true); });
+
   function addStackToBag(st) {
     if (!st) return true;
     if (st.maxDur) {
@@ -1304,8 +1461,9 @@
       cam.y += 17;
       cam.pitch = -0.34;
     }
-    cam.fogFar = 700;
-    const under = MC.Block.isLiquid(world.getBlock(Math.floor(cam.x), Math.floor(cam.y), Math.floor(cam.z)));
+    cam.nether = world.isNether(cam.x, cam.z);
+    cam.fogFar = cam.nether ? 280 : 700;
+    const under = world.getBlock(Math.floor(cam.x), Math.floor(cam.y), Math.floor(cam.z)) === MC.Block.WATER;
     if (under !== cam.underwater) {
       cam.underwater = under;
       underwaterEl.classList.toggle('show', under);
@@ -1384,7 +1542,10 @@
         mob.type === 'sheep' ? MC.Block.WOOL :
         mob.type === 'cow' ? MC.ITEM_KEY.raw_beef :
         mob.type === 'pig' ? MC.ITEM_KEY.raw_pork :
-        mob.type === 'rabbit' ? MC.ITEM_KEY.leather : MC.ITEM_KEY.feather;
+        mob.type === 'rabbit' || mob.type === 'fox' ? MC.ITEM_KEY.leather :
+        mob.type === 'goat' ? MC.Block.WOOL :
+        mob.type === 'frog' ? MC.ITEM_KEY.string :
+        mob.type === 'ember' ? MC.Block.NETHERRACK : MC.ITEM_KEY.feather;
       const got = addToBag(drop, 1);
       toast(got ? '获得 ' + MC.itemName(drop) : '背包已满');
       dirtySave = true;
@@ -1505,6 +1666,7 @@
     keys[e.code] = true;
     if (e.code === 'Escape') {
       if (state.mode === 'inventory') closeInventory(true);
+      else if (state.mode === 'loot') closeSupply(true);
       else if (state.mode === 'gallery') closeGallery(true);
       else if (state.mode === 'photo') closePhoto(true);
       else if (state.mode === 'crafting') closeCrafting(true);
@@ -1542,6 +1704,9 @@
     } else if (e.code === 'KeyE') {
       e.preventDefault();
       openInventory();
+    } else if (e.code === 'KeyR' && !e.ctrlKey && !e.metaKey) {
+      e.preventDefault();
+      useNearby();
     } else if (e.code === 'KeyP') {
       e.preventDefault();
       openPhoto();
@@ -2031,7 +2196,8 @@
     const minute = Math.floor((12 + state.time / MC.DAY_LENGTH * 24) % 24 * 60);
     const clock = String(Math.floor(minute / 60)).padStart(2, '0') + ':' + String(minute % 60).padStart(2, '0');
     hMode.textContent = MC.BIOME_NAMES[biome] || '远野';
-    $('hActivity').textContent = modeName + ' · ' + clock;
+    $('hActivity').textContent = world.isNether(player.pos[0], player.pos[2]) ? modeName + ' · 下界' : modeName + ' · ' + clock;
+    document.body.classList.toggle('in-nether', world.isNether(player.pos[0], player.pos[2]));
   }
 
   /* ================= 预加载 ================= */
@@ -2113,6 +2279,21 @@
 
     if (state.mode === 'playing') {
       player.update(dt, readInput());
+      portalCooldown = Math.max(0, portalCooldown - dt);
+      const footX = Math.floor(player.pos[0]), footY = Math.floor(player.pos[1]), footZ = Math.floor(player.pos[2]);
+      const insidePortal = world.getBlock(footX, footY, footZ) === MC.Block.PORTAL ||
+        world.getBlock(footX, footY + 1, footZ) === MC.Block.PORTAL;
+      portalDwell = insidePortal && portalCooldown <= 0 ? portalDwell + dt : 0;
+      if (portalDwell > 0.7) travelPortal();
+      if (world.isNether(player.pos[0], player.pos[2]) &&
+          world.getBlock(footX, footY, footZ) === MC.Block.LAVA) {
+        player.pos[0] = world.netherExit.x + 1.5;
+        player.pos[1] = world.netherExit.y;
+        player.pos[2] = world.netherExit.z + 3.5;
+        player.vel.fill(0);
+        portalCooldown = 2;
+        toast('熔岩灼热，已返回传送门旁');
+      }
       if (player.wantStep) {
         const ground = world.getBlock(
           Math.floor(player.pos[0]), Math.floor(player.pos[1] - 0.05), Math.floor(player.pos[2]));
@@ -2132,8 +2313,8 @@
       if (secrets) secrets.update(dt);
 
       const eyeNow = player.eye();
-      const underNow = MC.Block.isLiquid(world.getBlock(
-        Math.floor(eyeNow[0]), Math.floor(eyeNow[1]), Math.floor(eyeNow[2])));
+      const underNow = world.getBlock(
+        Math.floor(eyeNow[0]), Math.floor(eyeNow[1]), Math.floor(eyeNow[2])) === MC.Block.WATER;
       if (underNow) {
         bubbleTimer -= dt;
         if (bubbleTimer <= 0) {
@@ -2192,6 +2373,7 @@
     updateHud(dt);
     syncTouchUI();
     if (state.mode === 'playing') minimap.update(player, dt);
+    updateNearbyAction();
     if (state.mode === 'playing') saveWorld();
   }
 

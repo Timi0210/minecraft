@@ -21,7 +21,7 @@ const context = vm.createContext({
   Int16Array, Map, Set, Array, window: {}, document: { createElement: canvas }
 });
 for (const file of ['noise', 'blocks', 'world', 'mesher', 'renderer',
-  'items', 'crafting', 'particles', 'minimap', 'settings', 'horizon']) {
+  'items', 'crafting', 'particles', 'minimap', 'settings', 'horizon', 'mobs']) {
   const source = fs.readFileSync(path.join(root, 'js', file + '.js'), 'utf8');
   vm.runInContext(source, context, { filename: file + '.js' });
 }
@@ -68,13 +68,16 @@ function lightWorld(minX, maxX, minZ, maxZ) {
   return world;
 }
 
-assert.equal(MC.BLOCKS.length, 44);
-assert.equal(MC.ALL_ITEMS.length, 86);
+assert.equal(MC.BLOCKS.length, 57);
+assert.equal(MC.ALL_ITEMS.length, 99);
 assert.equal(MC.RECIPES.length, 36);
 assert.equal(MC.BLOCKS[MC.Block.TORCH].light, 14);
 assert.equal(MC.BLOCKS[MC.Block.TABLET].name, '石碑');
 assert.equal(MC.BLOCKS[MC.Block.STONE_SWORD].name, '石中剑');
 assert.equal(MC.BLOCKS[MC.Block.GLITCH].name, '丢失的贴图');
+assert.equal(MC.BLOCKS[MC.Block.SUPPLY_CHEST].name, '雪谷补给箱');
+assert.equal(MC.BLOCKS[MC.Block.PORTAL].solid, false);
+assert(MC.Atlas.index.ember_face < 256);
 assert.equal(MC.MINE[MC.Block.TABLET].hard, -1);
 assert.equal(MC.MINE[MC.Block.STONE_SWORD].hard, -1);
 assert(MC.SECRET_ITEMS.has(MC.ITEM_KEY.broken_steel));
@@ -126,6 +129,26 @@ const mobCube = renderer.getMobCube({
 });
 assert.equal(mobCube.verts.length, 240);
 assert.equal(mobCube.idx.length, 36);
+for (const type of ['fox', 'goat', 'frog', 'ember']) {
+  const animal = new MC.Mob(type, 0, 50, 0), boxes = [];
+  animal.collect(boxes);
+  assert(boxes.length >= 5, type + ' should render several body parts');
+  assert(boxes.every(box => Number.isInteger(box.tiles.side)), type + ' needs atlas textures');
+}
+
+// 雪谷建筑有补给箱和门；下界出口是能站立的岩台与可穿越的门。
+const expanded = new MC.World(2024, null);
+const chest = expanded.outpostChest;
+expanded.ensureChunk(chest.x >> 4, chest.z >> 4);
+assert.equal(expanded.getBlock(chest.x, chest.y, chest.z), MC.Block.SUPPLY_CHEST);
+const snowGate = expanded.outpostPortal;
+expanded.ensureChunk(snowGate.x >> 4, snowGate.z >> 4);
+assert.equal(expanded.getBlock(snowGate.x + 1, snowGate.y + 1, snowGate.z), MC.Block.PORTAL);
+const exit = expanded.netherExit;
+expanded.ensureChunk(exit.x >> 4, exit.z >> 4);
+assert.equal(expanded.biomeAtPlayer(exit.x, exit.y, exit.z), expanded.netherBiome(exit.x, exit.z));
+assert.equal(expanded.getBlock(exit.x + 1, exit.y + 1, exit.z), MC.Block.PORTAL);
+assert.equal(expanded.getBlock(exit.x + 1, exit.y - 1, exit.z + 3), MC.Block.BASALT);
 
 // 读档和后加载区块只凭 edits 重建方块光。
 const restored = new MC.World(2024, [[1, 140, 1, MC.Block.TORCH]]);
@@ -170,7 +193,8 @@ const inventoryFactory = new Function('MC', 'state', 'ui', `
   const MAX_STACK = 64; let dirtySave = false;
   ${between('  const stack =', '  const START_HOTBAR')}
   ${between('  function parseStacks', '  const world =')}
-  ${between('  function addToBag', '  function openInventory')}
+  ${between('  function addToBag', '  const nearbyAction')}
+  ${between('  function addStackToBag', '  function openInventory')}
   const {toast, showItemName, renderCraftGrid, refreshCraft, paintSlot, sfx} = ui;
   ${between('  function missingCraftMaterials', '  function putInGrid')}
   ${between('  function wearHeldTool', '  function resetMine')}

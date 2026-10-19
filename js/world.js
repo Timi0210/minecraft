@@ -10,6 +10,9 @@
   const SEA = 32;
   const MAX_TERRAIN = 136;
   const CHUNK_VOL = CHUNK * CHUNK * HEIGHT;
+  // 下界放在同一坐标存档的独立地带，区块、编辑和背包因而可以原样沿用。
+  const NETHER_X = 65536;
+  const NETHER_EDGE = 60000;
 
   const smoothstep = (a, b, x) => {
     const t = Math.max(0, Math.min(1, (x - a) / (b - a)));
@@ -33,7 +36,8 @@
   const BIOME_NAMES = {
     ocean: '海洋', frozen_ocean: '冻洋', beach: '沙滩', desert: '沙漠', plains: '平原',
     forest: '森林', taiga: '针叶林', snow: '雪原', mountain: '山地', cherry: '樱花林', badlands: '恶地',
-    lush_caves: '繁茂洞穴', dripstone_caves: '滴水石洞穴'
+    lush_caves: '繁茂洞穴', dripstone_caves: '滴水石洞穴',
+    crimson: '绯红森林', warped: '诡异森林', basalt: '玄武岩三角洲', souls: '灵魂沙峡谷'
   };
 
   /* 九座石碑的残页。它们不组成任务，只是同一段往事的不同切口。 */
@@ -98,6 +102,9 @@
       for (let dz = -20; dz <= 22; dz += 4) for (let dx = -31; dx <= 29; dx += 4)
         outpostY = Math.max(outpostY, this.heightAt(outpostX + dx, outpostZ + dz));
       this.outpost = { x: outpostX, z: outpostZ, y: Math.min(112, outpostY + 1) };
+      this.outpostChest = { x: outpostX - 21, y: this.outpost.y + 1, z: outpostZ + 1 };
+      this.outpostPortal = { x: outpostX + 11, y: this.outpost.y + 3, z: outpostZ - 3 };
+      this.netherExit = { x: NETHER_X, z: 0, y: 69 };
       if (savedEdits && savedEdits.length) {
         for (let i = 0; i < savedEdits.length; i++) {
           const e = savedEdits[i];
@@ -316,6 +323,7 @@
     }
 
     biomeField(x, z) {
+      if (this.isNether(x, z)) return { biome: this.netherBiome(x, z), height: 0, mountain: 0, badlands: 0, dry: 0, snow: 0 };
       const s = this.seed;
       const wx = x + nz(x * 0.004, z * 0.004, s + 3301, 2) * 68;
       const wz = z + nz(x * 0.004, z * 0.004, s + 5501, 2) * 68;
@@ -404,6 +412,7 @@
     }
 
     heightAt(x, z, field) {
+      if (this.isNether(x, z)) return this.netherHeight(x, z);
       const s = this.seed;
       field = field || this.biomeField(x, z);
       let h = 39 + field.height;
@@ -442,6 +451,7 @@
     }
 
     biomeAt(x, z, h, field) {
+      if (this.isNether(x, z)) return this.netherBiome(x, z);
       field = field || this.biomeField(x, z);
       if (h === undefined) h = this.heightAt(x, z, field);
       if (h <= SEA) return field.biome === 'snow' ? 'frozen_ocean' : 'ocean';
@@ -456,8 +466,27 @@
     }
 
     biomeAtPlayer(x, y, z) {
+      if (this.isNether(x, z)) return this.netherBiome(x, z);
       const h = this.heightAt(x, z);
       return y < h - 4 ? (this.caveBiomeAt(x, z) || this.biomeAt(x, z, h)) : this.biomeAt(x, z, h);
+    }
+
+    isNether(x, z) { return x >= NETHER_EDGE; }
+
+    netherBiome(x, z) {
+      const n = N.fbm2((x - NETHER_X) * 0.0032, z * 0.0032, this.seed + 51001, 3);
+      return n < 0.36 ? 'souls' : n < 0.51 ? 'crimson' : n < 0.68 ? 'warped' : 'basalt';
+    }
+
+    netherHeight(x, z) {
+      const nx = x - NETHER_X;
+      const broad = N.fbm2(nx * 0.007, z * 0.007, this.seed + 51103, 3);
+      const ridge = 1 - Math.abs(N.fbm2(nx * 0.018, z * 0.018, this.seed + 51127, 3) * 2 - 1);
+      let h = 30 + broad * 38 + Math.pow(ridge, 2) * 13;
+      // 门周围是一块安全的岩台；越过边缘便能看到熔岩海和菌林。
+      const d = Math.hypot(nx, z);
+      h += (68 - h) * (1 - smoothstep(14, 38, d));
+      return Math.max(22, Math.min(103, Math.round(h)));
     }
 
     badlandsLayer(y) {
@@ -474,6 +503,7 @@
 
     generate(chunk) {
       const bx = chunk.cx * CHUNK, bz = chunk.cz * CHUNK;
+      if (this.isNether(bx, bz)) { this.generateNether(chunk); return; }
       const blocks = chunk.blocks;
       const SEA_ = SEA;
 
@@ -559,6 +589,66 @@
       this.placeOpenWorld(chunk);
       this.applyEdits(chunk);
       chunk.generated = true;
+    }
+
+    generateNether(chunk) {
+      const bx = chunk.cx * CHUNK, bz = chunk.cz * CHUNK, blocks = chunk.blocks;
+      for (let z = 0; z < CHUNK; z++) for (let x = 0; x < CHUNK; x++) {
+        const wx = bx + x, wz = bz + z;
+        const h = this.netherHeight(wx, wz), biome = this.netherBiome(wx, wz);
+        const sea = 35;
+        const top = Math.max(h, sea);
+        const surface = biome === 'basalt' ? B.BASALT : biome === 'souls' ? B.SOUL_SAND : B.NETHERRACK;
+        for (let y = 0; y <= top; y++) {
+          let id = y === 0 ? B.BEDROCK : y <= h ? (y >= h - 3 ? surface : B.NETHERRACK) : B.LAVA;
+          if (id === B.NETHERRACK && y > 7 && y < h - 7 &&
+              N.noise3(wx * 0.045, y * 0.07, wz * 0.045, this.seed + 51239) > 0.78) id = B.AIR;
+          if (id === B.NETHERRACK && y < h - 3 && N.hash3(wx, y, wz, this.seed + 51427) > 0.994)
+            id = B.QUARTZ_ORE;
+          blocks[(y * CHUNK + z) * CHUNK + x] = id;
+        }
+        // 厚实的洞顶包住下界，不借用地表的天空。
+        const roof = 122 + Math.floor(N.noise2(wx * 0.02, wz * 0.02, this.seed + 51301) * 8);
+        for (let y = roof; y < HEIGHT; y++)
+          blocks[(y * CHUNK + z) * CHUNK + x] = y >= HEIGHT - 2 ? B.BEDROCK : B.NETHERRACK;
+        if (N.hash2(wx, wz, this.seed + 51503) > 0.987)
+          this.put(chunk, wx, roof - 1, wz, B.GLOWSTONE);
+      }
+      // 邻区块同样扫描边缘种子，菌伞能自然跨过区块线。
+      for (let dz = -4; dz < CHUNK + 4; dz++) for (let dx = -4; dx < CHUNK + 4; dx++) {
+        const x = bx + dx, z = bz + dz;
+        if (Math.hypot(x - NETHER_X, z) < 14 || N.hash2(x, z, this.seed + 51611) > 0.012) continue;
+        const biome = this.netherBiome(x, z);
+        if (biome !== 'crimson' && biome !== 'warped') continue;
+        const h = this.netherHeight(x, z);
+        if (h <= 38 || h > 91) continue;
+        const stem = biome === 'crimson' ? B.CRIMSON_STEM : B.WARPED_STEM;
+        const cap = biome === 'crimson' ? B.CRIMSON_CAP : B.WARPED_CAP;
+        const th = 4 + Math.floor(N.hash2(x, z, this.seed + 51631) * 4);
+        for (let y = h + 1; y <= h + th; y++) this.put(chunk, x, y, z, stem);
+        for (let zz = -2; zz <= 2; zz++) for (let xx = -2; xx <= 2; xx++) {
+          if (xx * xx + zz * zz > 6) continue;
+          this.put(chunk, x + xx, h + th, z + zz, cap, true);
+          if (Math.abs(xx) <= 1 && Math.abs(zz) <= 1) this.put(chunk, x + xx, h + th + 1, z + zz, cap, true);
+        }
+      }
+      this.placePortal(chunk, this.netherExit.x, this.netherExit.y, this.netherExit.z, true);
+      this.applyEdits(chunk);
+      chunk.generated = true;
+    }
+
+    placePortal(chunk, x0, floor, z0, platform) {
+      // 4×5 黑曜石门框，中心可穿行；与真实的方块网格对齐。
+      if (platform) for (let dx = -3; dx <= 6; dx++) for (let dz = -4; dz <= 4; dz++) {
+        const x = x0 + dx, z = z0 + dz;
+        for (let y = this.netherHeight(x, z) + 1; y < floor; y++) this.put(chunk, x, y, z, B.NETHERRACK);
+        this.put(chunk, x, floor - 1, z, B.BASALT);
+        for (let y = floor; y <= floor + 5; y++) this.put(chunk, x, y, z, B.AIR);
+      }
+      for (let dx = 0; dx < 4; dx++) for (let dy = 0; dy < 5; dy++) {
+        const edge = dx === 0 || dx === 3 || dy === 0 || dy === 4;
+        this.put(chunk, x0 + dx, floor + dy, z0, edge ? B.OBSIDIAN : B.PORTAL);
+      }
     }
 
     addOres(chunk) {
@@ -660,6 +750,16 @@
         for (let y = ground + 1; y <= stepY; y++) this.put(chunk, x, y, z, B.COBBLE);
         for (let dy = 1; dy <= 3; dy++) this.put(chunk, x, stepY + dy, z, B.AIR);
       }
+      // 左侧物资间：补给箱、工作台与可以辨认的储物架。
+      this.put(chunk, x0 - 21, base + 1, z0 + 1, B.SUPPLY_CHEST);
+      this.put(chunk, x0 - 24, base + 1, z0 - 3, B.TABLE);
+      for (const [dx, dz] of [[-27, -8], [-27, 4], [-10, -8]]) {
+        this.put(chunk, x0 + dx, base + 2, z0 + dz, B.PLANKS);
+        this.put(chunk, x0 + dx, base + 3, z0 + dz, B.PLANKS);
+      }
+      this.put(chunk, x0 - 20, base + 2, z0 - 9, B.TORCH);
+      // 另一间房里的传送门与雪谷形成鲜明的色彩对照。
+      this.placePortal(chunk, this.outpostPortal.x, this.outpostPortal.y, this.outpostPortal.z, false);
     }
 
     decorateCaves(chunk) {

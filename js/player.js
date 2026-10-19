@@ -164,8 +164,8 @@
       const fx = Math.floor(this.pos[0]), fz = Math.floor(this.pos[2]);
       const bodyY = Math.floor(this.pos[1] + 1.0);
       const feetY = Math.floor(this.pos[1] + 0.15);
-      this.inWater = MC.Block.isLiquid(w.getBlock(fx, bodyY, fz)) ||
-                     MC.Block.isLiquid(w.getBlock(fx, feetY, fz));
+      this.inWater = w.getBlock(fx, bodyY, fz) === MC.Block.WATER ||
+                     w.getBlock(fx, feetY, fz) === MC.Block.WATER;
 
       // 键盘是 8 个方向；触屏摇杆直接给出一个长度 0–1 的向量。
       let mx = input.moveX || 0, mz = input.moveZ || 0;

@@ -68,6 +68,18 @@
       } else if (type === 'rabbit') {
         this.w = 0.32; this.h = 0.82; this.r = 0.25;
         this.speed = 1.75; this.sway = 0.95; this.health = 3;
+      } else if (type === 'fox') {
+        this.w = 0.52; this.h = 0.9; this.r = 0.39;
+        this.speed = 1.55; this.sway = 0.82; this.health = 6;
+      } else if (type === 'goat') {
+        this.w = 0.62; this.h = 1.4; this.r = 0.47;
+        this.speed = 1.3; this.sway = 0.68; this.health = 10;
+      } else if (type === 'frog') {
+        this.w = 0.38; this.h = 0.55; this.r = 0.31;
+        this.speed = 1.15; this.sway = 1.0; this.health = 4;
+      } else if (type === 'ember') {
+        this.w = 0.7; this.h = 1.2; this.r = 0.5;
+        this.speed = 0.9; this.sway = 0.55; this.health = 9;
       } else {
         this.w = 0.36; this.h = 1.05; this.r = 0.30;
         this.speed = 1.35;
@@ -269,6 +281,41 @@
             mul(trs(0, cow ? -0.27 : -0.18, 0), scl(cow ? 0.22 : 0.19, cow ? 0.54 : 0.36, cow ? 0.22 : 0.19)));
           out.push({ m: mul(root, leg), tiles: { top: skin, side: skin, bottom: hoof } });
         }
+      } else if (this.type === 'fox' || this.type === 'goat' || this.type === 'ember') {
+        const fox = this.type === 'fox', goat = this.type === 'goat';
+        const skin = fox ? T.foxFur : goat ? T.goatFur : T.emberHide;
+        const face = fox ? T.foxFace : goat ? T.goatFace : T.emberFace;
+        const by = fox ? 0.53 : goat ? 0.82 : 0.68;
+        const body = mul(trs(0, by + bob, 0.06), scl(fox ? 0.64 : 0.76, fox ? 0.58 : 0.75, fox ? 1.0 : 1.05));
+        out.push({ m: mul(root, body), tiles: { top: skin, side: skin, bottom: skin } });
+        const head = mul(trs(0, by + (goat ? 0.31 : 0.13) + bob, -0.57),
+          scl(fox ? 0.42 : 0.52, fox ? 0.39 : 0.5, 0.46));
+        out.push({ m: mul(root, head), tiles: { top: skin, side: skin, bottom: skin, front: face } });
+        for (const side of [-1, 1]) {
+          if (fox || goat) {
+            const ear = mul(trs(side * 0.21, fox ? 0.96 + bob : 1.37 + bob, -0.6),
+              scl(0.15, goat ? 0.31 : 0.22, 0.16));
+            out.push({ m: mul(root, ear), tiles: { top: skin, side: skin, bottom: skin } });
+          }
+          for (const z of [-0.31, 0.36]) {
+            const turn = walk * (side * z > 0 ? 1 : -1);
+            const leg = mul(mul(trs(side * 0.23, 0.31, z), rx(turn)), scl(0.17, 0.58, 0.18));
+            out.push({ m: mul(root, leg), tiles: { top: skin, side: skin, bottom: skin } });
+          }
+        }
+        if (fox) {
+          const tail = mul(trs(0, 0.55 + bob, 0.62), scl(0.28, 0.28, 0.7));
+          out.push({ m: mul(root, tail), tiles: { top: skin, side: skin, bottom: T.wool } });
+        }
+      } else if (this.type === 'frog') {
+        const body = mul(trs(0, 0.29 + bob, 0), scl(0.52, 0.35, 0.5));
+        out.push({ m: mul(root, body), tiles: { top: T.frogSkin, side: T.frogSkin, bottom: T.frogSkin, front: T.frogFace } });
+        for (const side of [-1, 1]) {
+          const eye = mul(trs(side * 0.18, 0.53 + bob, -0.22), scl(0.15, 0.15, 0.15));
+          const foot = mul(trs(side * 0.29, 0.12, 0.26), scl(0.27, 0.18, 0.25));
+          out.push({ m: mul(root, eye), tiles: { top: T.frogSkin, side: T.frogSkin, bottom: T.frogFace, front: T.frogFace } });
+          out.push({ m: mul(root, foot), tiles: { top: T.frogSkin, side: T.frogSkin, bottom: T.frogSkin } });
+        }
       } else if (this.type === 'rabbit') {
         const body = mul(trs(0, 0.38 + bob, 0.08), scl(0.4, 0.4, 0.58));
         out.push({ m: mul(root, body), tiles: { top: T.rabbitFur, side: T.rabbitFur, bottom: T.rabbitFur } });
@@ -403,24 +450,30 @@
         if (!chunk || !chunk.generated) continue;
 
         let top = -1;
-        for (let y = MC.WORLD.HEIGHT - 3; y > 1; y--) {
+        const nether = W.isNether(x, z);
+        for (let y = nether ? 112 : MC.WORLD.HEIGHT - 3; y > 1; y--) {
           if (MC.Block.isSolid(W.getBlock(x, y, z))) { top = y; break; }
         }
         if (top < 0) continue;
         const ground = W.getBlock(x, top, z);
-        if (ground !== MC.Block.GRASS && ground !== MC.Block.SNOW && ground !== MC.Block.SAND) continue;
+        if (nether ? (ground !== MC.Block.NETHERRACK && ground !== MC.Block.SOUL_SAND && ground !== MC.Block.BASALT) :
+            (ground !== MC.Block.GRASS && ground !== MC.Block.SNOW && ground !== MC.Block.SAND)) continue;
         if (W.getBlock(x, top + 1, z) !== 0 || W.getBlock(x, top + 2, z) !== 0) continue;
         if (MC.Block.isLiquid(W.getBlock(x, top + 1, z))) continue;
 
         const biome = W.biomeAt(x, z, top);
-        const choices = ground === MC.Block.SNOW || biome === 'snow' || biome === 'mountain' ?
-          ['rabbit', 'rabbit', 'sheep', 'cow'] :
-          ground === MC.Block.SAND ? ['chicken', 'rabbit'] :
-          ['sheep', 'chicken', 'cow', 'pig', 'cow', 'pig'];
+        const choices = nether ? ['ember', 'ember', 'ember'] :
+          ground === MC.Block.SNOW || biome === 'snow' || biome === 'mountain' ?
+          ['rabbit', 'rabbit', 'sheep', 'goat', 'goat'] :
+          ground === MC.Block.SAND ? ['chicken', 'rabbit', 'frog'] :
+          biome === 'taiga' || biome === 'forest' ?
+          ['sheep', 'fox', 'fox', 'cow', 'frog', 'chicken'] :
+          ['sheep', 'chicken', 'cow', 'pig', 'frog', 'fox'];
         const available = choices.filter(type => this.count(type) < 4);
         if (!available.length) continue;
         const type = available[(Math.random() * available.length) | 0];
-        const radius = type === 'cow' ? 0.57 : type === 'sheep' ? 0.55 : type === 'pig' ? 0.48 : type === 'rabbit' ? 0.25 : 0.30;
+        const radius = type === 'cow' ? 0.57 : type === 'sheep' ? 0.55 : type === 'pig' ? 0.48 : type === 'rabbit' ? 0.25 :
+          type === 'goat' ? 0.47 : type === 'ember' ? 0.5 : type === 'fox' ? 0.39 : 0.30;
         if (this.mobs.some(m => !m.dead && Math.abs(m.pos[1] - (top + 1)) < 1.5 &&
             Math.abs(m.pos[0] - (x + 0.5)) < m.r + radius + 0.2 &&
             Math.abs(m.pos[2] - (z + 0.5)) < m.r + radius + 0.2)) continue;

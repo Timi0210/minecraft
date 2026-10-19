@@ -59,4 +59,10 @@ for (const pass of ['opaque', 'transparent']) for (const field of ['verts', 'idx
   assert.equal(Buffer.compare(Buffer.from(got.buffer), Buffer.from(want.buffer)), 0,
     pass + '.' + field + ' differs');
 }
-console.log('PASS: 后台方块生成、旧存档修改与网格完全一致');
+const netherCx = original.netherExit.x >> 4;
+worker.self.onmessage({ data: { type: 'generate', cx: netherCx, cz: 0 } });
+const netherGenerated = messages.pop();
+assert.equal(netherGenerated.type, 'generate');
+const netherExpected = original.ensureChunk(netherCx, 0);
+assert.deepEqual(new Uint8Array(netherGenerated.blocks), netherExpected.blocks);
+console.log('PASS: 后台地表与下界生成、旧存档修改与网格完全一致');

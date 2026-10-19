@@ -40,6 +40,7 @@
     }
 
     update(x, z) {
+      if (this.world.isNether && this.world.isNether(x, z)) return;
       if (this.phase === 'idle' &&
           (Math.abs(x - this.originX - HALF) > 48 || Math.abs(z - this.originZ - HALF) > 48))
         this.begin(x, z);

@@ -864,7 +864,14 @@ void main() { fragColor = vColor; }`;
 
       // 雾随视距；水下换成短距离蓝雾
       const under = !!cam.underwater;
+      const nether = !!cam.nether;
       const light = lightingAt(time);
+      if (nether) {
+        light.ambient = [0.50, 0.31, 0.31];
+        light.direct = [0.16, 0.09, 0.07];
+        light.horizon = [0.26, 0.065, 0.075];
+        light.shadow = false;
+      }
       const fogCol = under ? UNDERWATER_FOG : light.horizon;
       const fogFar = under ? 20 : (cam.fogFar || 130);
       this.fogNear = under ? 0.8 : fogFar * 0.68;
@@ -908,7 +915,7 @@ void main() { fragColor = vColor; }`;
 
       let faces = 0, drawn = 0;
       const transparent = [];
-      if (!under && this.horizonMesh) {
+      if (!under && !nether && this.horizonMesh) {
         this.updateNearMask(chunks, cam);
         gl.uniform3f(u.uFarTiles, MC.BLOCKS[MC.Block.GRASS].tex.top,
           MC.BLOCKS[MC.Block.STONE].tex.top, MC.BLOCKS[MC.Block.SNOW].tex.top);
@@ -959,7 +966,7 @@ void main() { fragColor = vColor; }`;
       }
 
       /* --- 天空只填没有地形的像素，避免被山体覆盖的云仍全屏计算。 --- */
-      if (!under) {
+      if (!under && !nether) {
         gl.depthFunc(gl.LEQUAL);
         gl.depthMask(false);
         gl.disable(gl.CULL_FACE);

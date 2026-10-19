@@ -430,6 +430,7 @@
 <link rel="stylesheet" href="css/redesign.css?v=9">
 <link rel="stylesheet" href="css/studio.css?v=1">
 <link rel="stylesheet" href="css/field-ui.css?v=1">
+<link rel="stylesheet" href="css/expedition-ui.css?v=1">
 </head>
 <body>
 <canvas id="game"></canvas>
@@ -440,9 +441,10 @@
 
 <div id="hud">
   <div class="worldMark"><span class="markCube">✦</span><span>栖野<small>WILD STUDIO</small></span></div>
-  <div class="placeLine"><b id="hMode">探索中</b><span id="hActivity">步行 · 12:00</span></div>
+  <div class="placeLine"><span class="placeDot"></span><b id="hMode">探索中</b><span class="placeDivider"></span><span id="hActivity">步行 · 12:00</span></div>
   <div id="debugStats"><b id="hPos">0 0 0</b> · <span id="hFps">0</span> fps · <span id="hChunks">0</span> 区块 · <span id="hTris">0</span> 面</div>
 </div>
+<button id="nearbyAction" class="hide" type="button" aria-live="polite"><span class="actionSymbol">✦</span><span><strong id="nearbyActionTitle">探索</strong><small id="nearbyActionHint">按 R 互动</small></span><kbd>R</kbd></button>
 <div id="mapControl">
   <button id="mapToggle" type="button" aria-label="收起手绘地图" aria-expanded="true" aria-controls="miniMapWrap"><span>⌖</span> 手绘地图 <kbd>M</kbd></button>
   <div id="miniMapWrap">
@@ -493,7 +495,7 @@
         <div class="eyebrow">A WORLD TO WANDER · 01</div>
         <div class="logo" id="title">栖野</div>
         <div class="sub" id="subtitle">走进风景，留下你的痕迹</div>
-        <p class="heroLead">去雪谷听风，在树林里找一块空地。用方块搭起喜欢的角落，再把某一刻的光留在相册里。</p>
+        <p class="heroLead">从雪谷的补给站出发，遇见新的生灵。穿过紫色的门，探索熔岩与菌林，再把喜欢的风景带回家。</p>
         <div id="loadbox"><div class="bar"><i id="barFill"></i></div><div id="loadText">正在生成世界…</div></div>
         <button class="btn" id="primary" disabled>正在铺开风景…</button>
         <div class="row" id="metaRow">
@@ -517,16 +519,21 @@
       <aside class="heroAside" aria-label="玩法介绍">
         <div class="asideLabel">WANDER · MAKE · REMEMBER</div>
         <div class="studioSteps">
-          <div><b>01</b><strong>随风漫游</strong><span>翻过山脊，遇见新的地平线。</span></div>
-          <div><b>02</b><strong>随手造景</strong><span>选喜欢的材料，布置一处角落。</span></div>
-          <div><b>03</b><strong>留下此刻</strong><span>换一道光，拍下你的风景。</span></div>
+          <div><b>01</b><strong>发现生灵</strong><span>山羊、狐狸与青蛙分布在不同风景里。</span></div>
+          <div><b>02</b><strong>雪谷补给</strong><span>进入山旁的房子，打开物资箱。</span></div>
+          <div><b>03</b><strong>穿过下界</strong><span>找到屋里的紫色传送门，探索另一片天地。</span></div>
         </div>
         <div class="asideQuote">“世界很大，<br>先在喜欢的地方停下。”</div>
       </aside>
     </div>
-    <div class="panelFoot"><span>世界与照片保存在这台设备上</span><details class="controlsDisclosure"><summary>操作指南 ↗</summary><div class="controls"><span><kbd>WASD</kbd> 移动 · 鼠标环顾</span><span><kbd>左键</kbd> 拆除 · <kbd>右键</kbd> 放置</span><span><kbd>E</kbd> 素材 · <kbd>P</kbd> 拍照 · <kbd>G</kbd> 相册</span><span><kbd>F</kbd> 飞行 · <kbd>T</kbd> 时段 · <kbd>M</kbd> 地图</span><span><kbd>Tab</kbd> 释放鼠标点工具 · <kbd>Esc</kbd> 暂停</span><span>手机：左手移动 · 右手看风景 · 点击按钮操作</span></div></details></div>
+    <div class="panelFoot"><span>世界与照片保存在这台设备上</span><details class="controlsDisclosure"><summary>操作指南 ↗</summary><div class="controls"><span><kbd>WASD</kbd> 移动 · 鼠标环顾</span><span><kbd>左键</kbd> 拆除 · <kbd>右键</kbd> 放置</span><span><kbd>R</kbd> 打开物资箱 / 穿越传送门</span><span><kbd>E</kbd> 素材 · <kbd>P</kbd> 拍照 · <kbd>G</kbd> 相册</span><span><kbd>F</kbd> 飞行 · <kbd>T</kbd> 时段 · <kbd>M</kbd> 地图</span><span>手机：左手移动 · 右手看风景 · 点击互动按钮</span></div></details></div>
   </div>
 </div>
+
+<div id="loot" class="hide" role="dialog" aria-modal="true" aria-label="雪谷补给箱">
+  <div class="lootPanel"><div class="lootEyebrow">ALPINE OUTPOST / 物资间</div><h2>雪谷补给箱</h2><p>有人为后来经过雪谷的人，留下了一点路上的东西。</p><div id="lootItems" class="lootItems"></div><div class="lootActions"><button id="lootTake" type="button">收下物品</button><button id="lootClose" type="button">返回世界</button></div></div>
+</div>
+<div id="travelCurtain" class="hide" aria-live="polite"><span>✦</span><strong id="travelTitle">穿越中</strong><small>正在展开另一片天地</small></div>
 
 <div id="palette" class="studioModal hide" role="dialog" aria-label="景观素材" aria-modal="true">
   <div class="studioSheet paletteSheet">
@@ -618,20 +625,20 @@
 <div id="err"></div>
 
 <script src="js/noise.js?v=59"></script>
-<script src="js/blocks.js?v=74"></script>
-<script src="js/world.js?v=70"></script>
+<script src="js/blocks.js?v=75"></script>
+<script src="js/world.js?v=71"></script>
 <script src="js/mesher.js?v=60"></script>
-<script src="js/renderer.js?v=68"></script>
-<script src="js/horizon.js?v=4"></script>
+<script src="js/renderer.js?v=69"></script>
+<script src="js/horizon.js?v=5"></script>
 <script src="js/particles.js?v=60"></script>
 <script src="js/viewmodel.js?v=58"></script>
-<script src="js/player.js?v=63"></script>
+<script src="js/player.js?v=64"></script>
 <script src="js/items.js?v=61"></script>
 <script src="js/crafting.js?v=59"></script>
-<script src="js/mobs.js?v=59"></script>
-<script src="js/minimap.js?v=64"></script>
+<script src="js/mobs.js?v=60"></script>
+<script src="js/minimap.js?v=65"></script>
 <script src="js/secrets.js?v=5"></script>
 <script src="js/settings.js?v=3"></script>
-<script src="js/main.js?v=74"></script>
+<script src="js/main.js?v=75"></script>
 </body>
 </html>

@@ -701,6 +701,30 @@
     for (let i = 0; i < 16; i++) set(d, i, 15, 4, 4, 6);
   });
 
+  /* 下界与雪谷补给箱：保留方块轮廓，64px 图集在近处补出细节。 */
+  tile('netherrack', rockyTile([91, 35, 44], [[119, 48, 55], [63, 24, 35], [150, 58, 54]]));
+  tile('lava', (d, rng) => { fill(d, [227, 82, 22]); specks(d, rng, [[255, 169, 40], [255, 202, 64], [133, 32, 19]], 55, 3, 2); });
+  tile('obsidian', rockyTile([30, 25, 49], [[64, 48, 99], [17, 17, 29], [91, 62, 126]]));
+  tile('portal', (d, rng) => { fill(d, [94, 43, 150], 195); specks(d, rng, [[176, 82, 226], [62, 34, 120], [214, 136, 245]], 48, 2, 3); });
+  tile('supply_top', (d, rng) => { fill(d, [122, 82, 46]); for (const y of [2, 7, 12]) for (let x = 0; x < 16; x++) set(d, x, y, 75, 50, 33); specks(d, rng, [[154, 113, 66]], 15, 2, 1); });
+  tile('supply_side', (d, rng) => { fill(d, [107, 70, 43]); for (const y of [1, 8, 14]) for (let x = 0; x < 16; x++) set(d, x, y, 55, 45, 39); for (let y = 0; y < 16; y++) { set(d, 2, y, 58, 54, 56); set(d, 13, y, 58, 54, 56); } for (let y = 6; y <= 10; y++) for (let x = 7; x <= 9; x++) set(d, x, y, 221, 173, 81); });
+  tile('soul_sand', rockyTile([105, 86, 75], [[135, 110, 94], [71, 58, 57], [160, 132, 103]]));
+  tile('basalt', rockyTile([65, 61, 68], [[88, 84, 94], [40, 39, 47], [113, 103, 103]]));
+  tile('crimson_stem', rockyTile([90, 24, 54], [[147, 44, 78], [56, 20, 41]]));
+  tile('crimson_cap', rockyTile([176, 37, 66], [[227, 67, 83], [110, 27, 56], [242, 101, 112]]));
+  tile('warped_stem', rockyTile([27, 80, 82], [[44, 130, 130], [19, 51, 61]]));
+  tile('warped_cap', rockyTile([39, 151, 135], [[72, 206, 176], [22, 99, 111], [88, 224, 182]]));
+  tile('glowstone', rockyTile([217, 152, 65], [[255, 226, 130], [155, 84, 48], [252, 188, 74]]));
+  tile('quartz_ore', rockyTile([108, 47, 53], [[226, 217, 197], [197, 176, 163], [79, 32, 42]]));
+  tile('fox_fur', rockyTile([196, 99, 41], [[239, 144, 58], [150, 61, 34]]));
+  tile('fox_face', (d) => { fill(d, [203, 104, 45]); for (let y = 8; y < 16; y++) for (let x = 3; x < 13; x++) set(d, x, y, 239, 225, 194); for (const x of [4, 11]) for (let y = 5; y <= 7; y++) set(d, x, y, 33, 29, 31); set(d, 8, 11, 34, 29, 29); });
+  tile('goat_fur', rockyTile([218, 210, 189], [[239, 230, 207], [166, 158, 148]]));
+  tile('goat_face', (d) => { fill(d, [221, 213, 193]); for (const x of [4, 11]) { set(d, x, 6, 37, 38, 40); set(d, x, 7, 37, 38, 40); } for (let x = 6; x <= 9; x++) set(d, x, 11, 136, 104, 89); });
+  tile('frog_skin', rockyTile([85, 156, 76], [[119, 187, 74], [48, 112, 70]]));
+  tile('frog_face', (d) => { fill(d, [91, 157, 80]); for (const x of [4, 11]) { set(d, x, 4, 241, 226, 161); set(d, x, 5, 21, 51, 38); } for (let x = 6; x < 10; x++) set(d, x, 11, 40, 84, 50); });
+  tile('ember_hide', rockyTile([114, 41, 44], [[168, 56, 42], [72, 28, 39], [237, 106, 37]]));
+  tile('ember_face', (d) => { fill(d, [130, 45, 43]); for (const x of [4, 11]) { set(d, x, 5, 255, 186, 66); set(d, x, 6, 61, 28, 31); } for (let x = 5; x <= 10; x++) set(d, x, 12, 198, 101, 52); });
+
   /* ---------- 合成图集 ---------- */
   // 地表与山面选用多张固定变体，避免一整座山出现相同的 16 像素斑点。
   const variantNames = [
@@ -862,7 +886,10 @@
         CHERRY_LOG = 27, CHERRY_LEAVES = 28, CHERRY_PLANKS = 29, PINK_PETALS = 30,
         RED_SAND = 31, TERRACOTTA = 32, ORANGE_TERRACOTTA = 33,
         YELLOW_TERRACOTTA = 34, WHITE_TERRACOTTA = 35, MOSS = 36, CLAY = 37, DRIPSTONE = 38, TORCH = 39,
-        STONE_SWORD = 40, TABLET = 41, GLITCH = 42, BANNER = 43;
+        STONE_SWORD = 40, TABLET = 41, GLITCH = 42, BANNER = 43,
+        NETHERRACK = 44, LAVA = 45, OBSIDIAN = 46, PORTAL = 47, SUPPLY_CHEST = 48,
+        SOUL_SAND = 49, BASALT = 50, CRIMSON_STEM = 51, CRIMSON_CAP = 52,
+        WARPED_STEM = 53, WARPED_CAP = 54, GLOWSTONE = 55, QUARTZ_ORE = 56;
 
   const DEFS = [
     { name: '空气' },
@@ -908,7 +935,20 @@
     { name: '石中剑', solid: 1, opaque: 1, tex: { top: 'sword_stone_top', side: 'sword_stone_side', bottom: 'sword_stone_side' } },
     { name: '石碑', solid: 1, opaque: 1, tex: { all: 'tablet' } },
     { name: '丢失的贴图', solid: 1, opaque: 1, tex: { all: 'glitch' } },
-    { name: '旗帜', solid: 1, opaque: 1, tex: { all: 'banner' } }
+    { name: '旗帜', solid: 1, opaque: 1, tex: { all: 'banner' } },
+    { name: '下界岩', solid: 1, opaque: 1, tex: { all: 'netherrack' } },
+    { name: '熔岩', solid: 0, opaque: 0, liquid: 1, transparent: 1, light: 12, tex: { all: 'lava' } },
+    { name: '黑曜石', solid: 1, opaque: 1, tex: { all: 'obsidian' } },
+    { name: '下界传送门', solid: 0, opaque: 0, transparent: 1, tex: { all: 'portal' } },
+    { name: '雪谷补给箱', solid: 1, opaque: 1, tex: { top: 'supply_top', side: 'supply_side', bottom: 'supply_top' } },
+    { name: '灵魂沙', solid: 1, opaque: 1, tex: { all: 'soul_sand' } },
+    { name: '玄武岩', solid: 1, opaque: 1, tex: { all: 'basalt' } },
+    { name: '绯红菌柄', solid: 1, opaque: 1, tex: { all: 'crimson_stem' } },
+    { name: '绯红菌盖', solid: 1, opaque: 1, tex: { all: 'crimson_cap' } },
+    { name: '诡异菌柄', solid: 1, opaque: 1, tex: { all: 'warped_stem' } },
+    { name: '诡异菌盖', solid: 1, opaque: 1, tex: { all: 'warped_cap' } },
+    { name: '萤石', solid: 1, opaque: 1, light: 12, tex: { all: 'glowstone' } },
+    { name: '下界石英矿', solid: 1, opaque: 1, tex: { all: 'quartz_ore' } }
   ];
 
   const BLOCKS = DEFS.map((d, id) => {
@@ -985,7 +1025,9 @@
     COAL_ORE, IRON_ORE, GOLD_ORE, DIAMOND_ORE, REDSTONE_ORE, TABLE, WOOL, CACTUS, ICE, SPRUCE_LOG, SPRUCE_LEAVES, BIRCH_LOG, BIRCH_LEAVES,
     CHERRY_LOG, CHERRY_LEAVES, CHERRY_PLANKS, PINK_PETALS, RED_SAND, TERRACOTTA, ORANGE_TERRACOTTA,
     YELLOW_TERRACOTTA, WHITE_TERRACOTTA, MOSS, CLAY, DRIPSTONE, TORCH,
-    STONE_SWORD, TABLET, GLITCH, BANNER
+    STONE_SWORD, TABLET, GLITCH, BANNER, NETHERRACK, LAVA, OBSIDIAN, PORTAL,
+    SUPPLY_CHEST, SOUL_SAND, BASALT, CRIMSON_STEM, CRIMSON_CAP, WARPED_STEM,
+    WARPED_CAP, GLOWSTONE, QUARTZ_ORE
   };
   MC.MOB_TILES = {
     wool: tileIndex.wool,
@@ -1003,7 +1045,11 @@
     pigFace: tileIndex.pig_face,
     rabbitFur: tileIndex.rabbit_fur,
     rabbitFace: tileIndex.rabbit_face,
-    rabbitEar: tileIndex.rabbit_ear
+    rabbitEar: tileIndex.rabbit_ear,
+    foxFur: tileIndex.fox_fur, foxFace: tileIndex.fox_face,
+    goatFur: tileIndex.goat_fur, goatFace: tileIndex.goat_face,
+    frogSkin: tileIndex.frog_skin, frogFace: tileIndex.frog_face,
+    emberHide: tileIndex.ember_hide, emberFace: tileIndex.ember_face
   };
   // 硬度（秒，裸手基准）/ 适配工具 / 掉落
   const MINE = {
