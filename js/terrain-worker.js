@@ -1,7 +1,7 @@
 /* terrain-worker.js — 在后台生成方块和完整网格，主线程只负责上传。 */
 self.window = self;
 self.MC = { skipAtlas: true };
-importScripts('noise.js?v=59', 'blocks.js?v=76', 'world.js?v=72', 'mesher.js?v=60');
+importScripts('noise.js?v=59', 'blocks.js?v=76', 'world.js?v=73', 'mesher.js?v=60');
 
 let world = null;
 const key = (cx, cz) => cx + ',' + cz;

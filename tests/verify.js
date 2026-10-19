@@ -139,7 +139,7 @@ for (const type of ['fox', 'goat', 'frog', 'ember']) {
   assert(boxes.every(box => Number.isInteger(box.tiles.side)), type + ' needs atlas textures');
 }
 
-// 雪谷建筑有补给箱和门；下界出口是能站立的岩台与可穿越的门。
+// 雪谷建筑的门廊应从雪地接通补给间和传送门房。
 const expanded = new MC.World(2024, null);
 const chest = expanded.outpostChest;
 expanded.ensureChunk(chest.x >> 4, chest.z >> 4);
@@ -147,6 +147,58 @@ assert.equal(expanded.getBlock(chest.x, chest.y, chest.z), MC.Block.SUPPLY_CHEST
 const snowGate = expanded.outpostPortal;
 expanded.ensureChunk(snowGate.x >> 4, snowGate.z >> 4);
 assert.equal(expanded.getBlock(snowGate.x + 1, snowGate.y + 1, snowGate.z), MC.Block.PORTAL);
+const outpost = expanded.outpost, base = outpost.y;
+let pathEnd = 40;
+for (let dz = 14; dz <= 40; dz++) {
+  if (expanded.heightAt(outpost.x - 17, outpost.z + dz) >= base - (dz - 11)) {
+    pathEnd = dz;
+    break;
+  }
+}
+for (let z = outpost.z - 3; z <= outpost.z + pathEnd; z += 16) {
+  for (let x = outpost.x - 21; x <= outpost.x + 14; x += 16)
+    expanded.ensureChunk(x >> 4, z >> 4);
+}
+for (let z = outpost.z - 3; z <= outpost.z + pathEnd; z++) {
+  for (const x of [outpost.x - 21, outpost.x - 3, outpost.x + 2, outpost.x + 14])
+    expanded.ensureChunk(x >> 4, z >> 4);
+}
+for (let dx = -19; dx <= -15; dx++) for (let dy = 1; dy <= 4; dy++)
+  assert.equal(expanded.getBlock(outpost.x + dx, base + dy, outpost.z + 8), MC.Block.AIR,
+    'snow outpost entrance must be five blocks wide and four blocks tall');
+for (const [dx, floor] of [[-3, base], [-2, base], [-1, base + 1], [0, base + 1], [1, base + 2], [2, base + 2]]) {
+  assert.equal(expanded.getBlock(outpost.x + dx, floor, outpost.z), MC.Block.PLANKS);
+  for (let y = floor + 1; y <= floor + 2; y++)
+    assert.equal(expanded.getBlock(outpost.x + dx, y, outpost.z), MC.Block.AIR,
+      'connector must have standing room');
+}
+const startX = outpost.x - 17, startZ = outpost.z + pathEnd;
+const startFloor = Math.max(expanded.heightAt(startX, startZ), base - (pathEnd - 11));
+assert.equal(expanded.getBlock(startX, startFloor, startZ), MC.Block.PLANKS);
+assert.equal(startFloor, expanded.heightAt(startX, startZ), 'stairs must reach natural snow level');
+const canStand = (x, y, z) => MC.Block.isSolid(expanded.getBlock(x, y - 1, z)) &&
+  !MC.Block.isSolid(expanded.getBlock(x, y, z)) &&
+  !MC.Block.isSolid(expanded.getBlock(x, y + 1, z));
+const queue = [[startX, startFloor + 1, startZ]], seen = new Set(), reached = new Set();
+for (let i = 0; i < queue.length; i++) {
+  const [x, y, z] = queue[i], key = x + ',' + y + ',' + z;
+  if (seen.has(key)) continue;
+  seen.add(key);
+  if (x === chest.x + 1 && z === chest.z && y === base + 1) reached.add('chest');
+  if (x === snowGate.x + 1 && z === snowGate.z + 2 && y === base + 3) reached.add('portal');
+  for (const [nx, nz] of [[x - 1, z], [x + 1, z], [x, z - 1], [x, z + 1]]) {
+    if (nx < outpost.x - 21 || nx > outpost.x + 14 ||
+        nz < outpost.z - 3 || nz > outpost.z + pathEnd) continue;
+    for (let ny = y - 1; ny <= y + 1; ny++) {
+      if (ny < base - 12 || ny > base + 7 || !canStand(nx, ny, nz)) continue;
+      const next = nx + ',' + ny + ',' + nz;
+      if (!seen.has(next)) queue.push([nx, ny, nz]);
+    }
+  }
+}
+assert(reached.has('chest') && reached.has('portal'), 'snowfield route must reach both rooms on foot');
+assert(seen.size < 20000, 'entrance walkability check must stay bounded');
+// 下界出口是能站立的岩台与可穿越的门。
 const exit = expanded.netherExit;
 expanded.ensureChunk(exit.x >> 4, exit.z >> 4);
 assert.equal(expanded.biomeAtPlayer(exit.x, exit.y, exit.z), expanded.netherBiome(exit.x, exit.z));
