@@ -410,7 +410,6 @@
   const seedLabel = $('seedLabel');
   const crosshair = $('crosshair');
   const hudEl = $('hud');
-  const hintEl = $('hint');
   const hotbarEl = $('hotbar');
   const itemName = $('itemName');
   const invEl = $('inv');
@@ -493,7 +492,6 @@
     overlay.classList.add('hide');
     crosshair.classList.add('show');
     hudEl.classList.add('show');
-    hintEl.classList.add('show');
     hotbarEl.classList.add('show');
   }
 
@@ -730,7 +728,7 @@
     if (!photos.length) {
       const empty = document.createElement('div');
       empty.className = 'galleryEmpty';
-      empty.innerHTML = '<b>还没有照片</b>走进世界，按 P 或点 ◎，给喜欢的风景拍一张。';
+      empty.innerHTML = '<b>还没有照片</b>走进世界，点 ◎，给喜欢的风景拍一张。';
       grid.appendChild(empty);
       return;
     }
@@ -1740,7 +1738,7 @@
       if (uiCursor) {
         state.mouseDown[0] = state.mouseDown[1] = false;
         if (document.pointerLockElement === canvas) document.exitPointerLock();
-        toast('可以点击右侧工具 · 再按 Tab 返回');
+        toast('可以点击右侧工具 · 再点画面继续');
       } else requestLock();
     } else if (e.code === 'KeyE') {
       e.preventDefault();

@@ -13,7 +13,7 @@
     fireflies: '萤火引路'
   };
 
-  // 世界里有实体、可以按 R 互动的四个彩蛋。
+  // 世界里有实体、走近可以互动的四个彩蛋。
   const SITE_REACH = { easel: 6, well: 6, shoes: 5, key: 5 };
 
   class Secrets {

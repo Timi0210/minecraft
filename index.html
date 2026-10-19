@@ -54,18 +54,6 @@
   .miniMapTitle { display: flex; justify-content: space-between; color: #e7fbff; font: 700 11px/1.5 sans-serif; margin-bottom: 4px; }
   .miniMapTitle span { color: #b9d8e5; font-weight: 500; }
   #miniMap { display: block; width: 192px; max-width: 100%; height: auto; aspect-ratio: 1; image-rendering: pixelated; border-radius: 6px; }
-  #hint {
-    position: fixed; right: 14px; top: 14px; pointer-events: none; opacity: 0; transition: opacity .25s;
-    font-size: 12px; color: rgba(255,255,255,.72); text-align: right; line-height: 1.8;
-    text-shadow: 0 1px 2px rgba(0,0,0,.9);
-  }
-  #hint.show { opacity: 1; }
-  kbd {
-    display: inline-block; min-width: 17px; padding: 0 4px; margin: 0 1px;
-    font: 11px/16px "SF Mono", Menlo, monospace; text-align: center;
-    color: #dfe9d2; background: rgba(0,0,0,.45); border: 1px solid rgba(255,255,255,.22);
-    border-bottom-width: 2px; border-radius: 3px;
-  }
 
   /* ---------- 快捷栏 ---------- */
   #hotbar {
@@ -339,24 +327,7 @@
   }
   .btn.ghost:hover:not(:disabled) { background: rgba(202, 242, 251, .22); }
   .row, .invFoot { flex-wrap: wrap; gap: 8px; }
-  .controls { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin: 26px auto 4px; text-align: left; }
-  .controlGroup {
-    min-width: 0; padding: 14px; border-radius: 15px;
-    background: linear-gradient(160deg, rgba(231, 250, 255, .10), rgba(21, 61, 83, .24));
-    border: 1px solid var(--glass-line); box-shadow: inset 0 1px 0 rgba(255,255,255,.12);
-  }
-  .controlHeading { margin: 0 0 10px; color: #e4f6fa; font-size: 12px; font-weight: 700; letter-spacing: .08em; }
-  .controlHeading span { color: #8ed5e1; font: 700 11px/1 "SF Mono", Menlo, monospace; margin-right: 6px; }
-  .keyGrid { display: grid; gap: 5px; }
-  .keyGrid > div { min-width: 0; min-height: 27px; display: flex; align-items: center; gap: 8px; color: #d4e6ec; font-size: 11.5px; }
-  .keyGrid kbd { min-width: 58px; white-space: nowrap; text-align: center; }
-  .keyGrid > div span { min-width: 0; line-height: 1.25; }
-  kbd {
-    color: #f5fcff; background: linear-gradient(160deg, rgba(229, 248, 255, .22), rgba(61, 118, 142, .22));
-    border: 1px solid rgba(226, 247, 255, .32); border-bottom-color: rgba(226, 247, 255, .18);
-    border-radius: 6px; box-shadow: inset 0 1px 0 rgba(255,255,255,.25);
-  }
-  #hud, #hint, #hotbar, #toast {
+  #hud, #hotbar, #toast {
     background: linear-gradient(145deg, rgba(204, 238, 250, .19), rgba(7, 32, 49, .57));
     border: 1px solid var(--glass-edge); border-radius: 14px;
     box-shadow: inset 0 1px 0 rgba(255,255,255,.27), 0 8px 26px rgba(0, 15, 28, .25);
@@ -365,8 +336,6 @@
   }
   #hud { padding: 10px 14px; color: #effaff; text-shadow: 0 1px 2px rgba(0,0,0,.55); }
   #hud .dim { color: #b4d3de; }
-  #hint { padding: 10px 13px; color: #e0f0f5; text-align: left; line-height: 1.9; }
-  .hintTitle { color: #a7e7ef; font-size: 10px; letter-spacing: .16em; font-weight: 700; }
   #hotbar { gap: clamp(2px, .5vw, 5px); padding: 6px; border-radius: 15px; }
   .slot {
     width: clamp(30px, 5.5vw, 54px); height: clamp(30px, 5.5vw, 54px); border-radius: 9px;
@@ -407,13 +376,7 @@
   @media (max-width: 620px) {
     .logo { font-size: clamp(30px, 9vw, 42px); }
     .panel, .invPanel, .craftPanel { padding: 20px 16px; border-radius: 17px; }
-    .controls { grid-template-columns: 1fr; margin-top: 18px; }
-    .controlGroup { padding: 11px 13px; }
-    .keyGrid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px; }
-    .keyGrid > div { align-items: flex-start; flex-direction: column; gap: 3px; }
-    .keyGrid kbd { min-width: 0; }
     .row { gap: 8px; }
-    #hint { top: auto; bottom: 76px; right: 10px; left: 10px; font-size: 10px; }
     #hud { left: 10px; top: 10px; font-size: 10px; }
     #miniMapWrap, #miniMap { width: 132px; }
     .craftSplit { flex-direction: column; }
@@ -427,10 +390,10 @@
     #invGrid { grid-template-columns: repeat(4, 1fr); }
   }
 </style>
-<link rel="stylesheet" href="css/redesign.css?v=10">
-<link rel="stylesheet" href="css/studio.css?v=1">
-<link rel="stylesheet" href="css/field-ui.css?v=2">
-<link rel="stylesheet" href="css/expedition-ui.css?v=2">
+<link rel="stylesheet" href="css/redesign.css?v=11">
+<link rel="stylesheet" href="css/studio.css?v=2">
+<link rel="stylesheet" href="css/field-ui.css?v=3">
+<link rel="stylesheet" href="css/expedition-ui.css?v=3">
 </head>
 <body>
 <canvas id="game"></canvas>
@@ -444,22 +407,19 @@
   <div class="placeLine"><span class="placeDot"></span><b id="hMode">探索中</b><span class="placeDivider"></span><span id="hActivity">步行 · 12:00</span></div>
   <div id="debugStats"><b id="hPos">0 0 0</b> · <span id="hFps">0</span> fps · <span id="hChunks">0</span> 区块 · <span id="hTris">0</span> 面</div>
 </div>
-<button id="nearbyAction" class="hide" type="button" aria-live="polite"><span class="actionSymbol">✦</span><span><strong id="nearbyActionTitle">探索</strong><small id="nearbyActionHint">按 R 互动</small></span><kbd>R</kbd></button>
+<button id="nearbyAction" class="hide" type="button" aria-live="polite"><span class="actionSymbol">✦</span><span><strong id="nearbyActionTitle">探索</strong><small id="nearbyActionHint">走近看看</small></span></button>
 <div id="mapControl">
-  <button id="mapToggle" type="button" aria-label="收起手绘地图" aria-expanded="true" aria-controls="miniMapWrap"><span>⌖</span> 手绘地图 <kbd>M</kbd></button>
+  <button id="mapToggle" type="button" aria-label="收起手绘地图" aria-expanded="true" aria-controls="miniMapWrap"><span>⌖</span> 手绘地图 </button>
   <div id="miniMapWrap">
     <div class="miniMapTitle">走过的地方 <span>THE WORLD YOU KNOW</span></div>
     <canvas id="miniMap" aria-label="手绘地图，只显示走过的区域和玩家朝向"></canvas>
   </div>
 </div>
-<div id="hint">
-  <span><kbd>WASD</kbd> 漫游</span><span><kbd>鼠标</kbd> 环顾与造景</span><span><kbd>Tab</kbd> 点击工具</span>
-</div>
 <div id="sceneDock" aria-label="景观工具">
-  <button id="dockPalette" type="button"><span>▦</span> 素材 <kbd>E</kbd></button>
-  <button id="dockPhoto" type="button"><span>◎</span> 拍照 <kbd>P</kbd></button>
-  <button id="dockGallery" type="button"><span>▤</span> 相册 <kbd>G</kbd></button>
-  <button id="dockTime" type="button"><span>☀</span> 换时光 <kbd>T</kbd></button>
+  <button id="dockPalette" type="button"><span>▦</span> 素材</button>
+  <button id="dockPhoto" type="button"><span>◎</span> 拍照</button>
+  <button id="dockGallery" type="button"><span>▤</span> 相册</button>
+  <button id="dockTime" type="button"><span>☀</span> 换时光</button>
 </div>
 
 <div id="hotbar"></div>
@@ -526,7 +486,7 @@
         <div class="asideQuote">“世界很大，<br>先在喜欢的地方停下。”</div>
       </aside>
     </div>
-    <div class="panelFoot"><span>世界与照片保存在这台设备上</span><details class="controlsDisclosure"><summary>操作指南 ↗</summary><div class="controls"><span><kbd>WASD</kbd> 移动 · 鼠标环顾</span><span><kbd>左键</kbd> 拆除 · <kbd>右键</kbd> 放置</span><span><kbd>R</kbd> 打开物资箱 · 走进传送门即穿越</span><span><kbd>E</kbd> 素材 · <kbd>P</kbd> 拍照 · <kbd>G</kbd> 相册</span><span><kbd>F</kbd> 飞行 · <kbd>T</kbd> 时段 · <kbd>M</kbd> 地图</span><span>手机：左手移动 · 右手看风景 · 短按放置、长按拆除</span></div></details></div>
+    <div class="panelFoot"><span>世界与照片保存在这台设备上</span></div>
   </div>
 </div>
 
@@ -561,7 +521,7 @@
 
 <div id="inv" class="hide">
   <div class="invPanel">
-    <div class="invTitle">背包<small>点击拿起 / 放下 · 点击快捷栏替换 · E 或 Esc 关闭</small></div>
+    <div class="invTitle">背包<small>点击拿起 / 放下 · 点击快捷栏替换</small></div>
     <div class="invTabs">
       <button class="tab sel" id="tabBag">背包</button>
       <button class="tab" id="tabCreative">创造模式</button>
@@ -589,7 +549,7 @@
 
 <div id="craft" class="hide">
   <div class="craftPanel">
-    <div class="invTitle">合成台<small>点配方预览 · 点成品时从背包扣材料 · E 或 Esc 关闭</small></div>
+    <div class="invTitle">合成台<small>点配方预览 · 点成品时从背包扣材料</small></div>
     <div class="craftRow">
       <div id="craftGrid" class="craftGrid"></div>
       <div class="craftArrow">→</div>
@@ -612,7 +572,7 @@
     <div class="readTop"><span>栖野 / 手记</span><button class="readClose" id="readClose" type="button">合上 ×</button></div>
     <h2 id="readTitle">手记</h2>
     <div class="readBody" id="readText"></div>
-    <div class="readFoot"><span>按 <kbd>Esc</kbd> 或点击空白处合上</span><span id="readHint"></span></div>
+    <div class="readFoot"><span>点击空白处合上</span><span id="readHint"></span></div>
   </div>
 </div>
 
@@ -636,8 +596,8 @@
 <script src="js/crafting.js?v=59"></script>
 <script src="js/mobs.js?v=61"></script>
 <script src="js/minimap.js?v=65"></script>
-<script src="js/secrets.js?v=10"></script>
+<script src="js/secrets.js?v=11"></script>
 <script src="js/settings.js?v=3"></script>
-<script src="js/main.js?v=78"></script>
+<script src="js/main.js?v=80"></script>
 </body>
 </html>

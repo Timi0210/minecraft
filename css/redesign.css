@@ -58,11 +58,6 @@ body { color: var(--cream); font-family: "PingFang SC", "Noto Sans CJK SC", -app
 .asideQuote { color: var(--paper); font: 600 24px/1.5 "Songti SC", serif; letter-spacing: .08em; }
 .asideTags { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
 .asideTags span { padding: 5px 8px; border: 1px solid rgba(237, 239, 212, .28); border-radius: 20px; color: #c6ddce; font-size: 10px; }
-.controlsDisclosure { position: relative; }
-.controlsDisclosure summary { color: #e7e7cb; cursor: pointer; list-style: none; }
-.controlsDisclosure summary::-webkit-details-marker { display: none; }
-.controlsDisclosure[open] .controls { position: absolute; z-index: 3; right: 0; bottom: 29px; width: min(360px, 72vw); display: grid; gap: 11px; padding: 18px; border: 1px solid var(--line); border-radius: 12px; background: #173b33; box-shadow: 0 16px 40px rgba(0,0,0,.4); color: #d8e6d6; font-size: 11px; }
-kbd { color: var(--cream); background: rgba(235, 241, 223, .10); border: 1px solid rgba(248, 245, 219, .32); border-radius: 5px; box-shadow: none; }
 
 /* 游戏内：留白的地图，中央画面留给世界。 */
 #hud { z-index: 6; left: 20px; top: 18px; padding: 0; border: 0; border-radius: 0; background: none; box-shadow: none; backdrop-filter: none; color: var(--cream); font: inherit; text-shadow: 0 2px 10px rgba(0,0,0,.62); }
@@ -79,9 +74,6 @@ kbd { color: var(--cream); background: rgba(235, 241, 223, .10); border: 1px sol
 .miniMapTitle { margin-bottom: 8px; color: #fff9e6; font-size: 11px; letter-spacing: .08em; }
 .miniMapTitle span { color: #d5d7b8; font-size: 9px; }
 #miniMap { width: 160px; border-radius: 8px; border: 1px solid rgba(236, 244, 225, .3); }
-#hint { z-index: 6; left: 20px; right: auto; top: auto; bottom: 93px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; max-width: 400px; padding: 0; background: none; border: 0; box-shadow: none; backdrop-filter: none; font-size: 10px; text-shadow: 0 2px 8px #142d2a; }
-#hint span { display: inline-flex; align-items: center; gap: 3px; }
-#hint kbd { color: #fff8e6; background: rgba(22, 48, 41, .65); }
 #hotbar { bottom: 17px; padding: 6px; gap: 5px; border: 1px solid rgba(245, 243, 216, .62); border-radius: 15px; background: rgba(20, 47, 40, .78); box-shadow: 0 12px 32px rgba(5, 22, 23, .34); backdrop-filter: blur(12px); }
 .slot { width: clamp(35px, 5vw, 52px); height: clamp(35px, 5vw, 52px); border: 1px solid rgba(238, 239, 209, .24); border-radius: 9px; background: rgba(244, 246, 222, .08); box-shadow: inset 0 1px 0 rgba(255,255,255,.08); }
 .slot.sel { border-color: #f0dfa9; background: rgba(225, 212, 159, .19); box-shadow: 0 0 0 2px rgba(244, 224, 163, .34), inset 0 1px 0 rgba(255,255,255,.2); transform: translateY(-3px); }
@@ -117,7 +109,6 @@ kbd { color: var(--cream); background: rgba(235, 241, 223, .10); border: 1px sol
   .placeLine { margin-top: 10px; }
   #miniMapWrap { top: 10px; right: 10px; width: 138px; padding: 8px; }
   #miniMap { width: 120px; }
-  #hint { display: none; }
   #hotbar { bottom: 8px; }
   #heldItem { width: 112px; height: 112px; }
 }
@@ -177,7 +168,6 @@ kbd { color: var(--cream); background: rgba(235, 241, 223, .10); border: 1px sol
   display: flex; justify-content: space-between; gap: 12px; padding: 14px 32px 0;
   border-top: 1px solid rgba(42, 70, 54, .14); color: #7b8772; font-size: 10px;
 }
-.readFoot kbd { color: #334b3d; background: rgba(46, 72, 55, .08); border-color: rgba(46, 72, 55, .24); }
 
 /* 相机闪光：夜里的摄影师按快门和你拍下它时各用一次。 */
 #flash { position: fixed; inset: 0; z-index: 33; pointer-events: none; background: #f4fbff; opacity: 0; }
@@ -194,7 +184,6 @@ kbd { color: var(--cream); background: rgba(235, 241, 223, .10); border: 1px sol
 
 /* ---------- 手机触屏操作 ---------- */
 body.touch-mode { overscroll-behavior: none; }
-body.touch-mode #hint,
 body.touch-mode #heldItem,
 body.touch-mode #itemName { display: none !important; }
 body.touch-mode #hotbar {
