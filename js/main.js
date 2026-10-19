@@ -1807,6 +1807,8 @@
       return;
     }
     if (e.button === 0) {
+      // 走近补给箱或手记时，左键先用来打开它，而不是挖方块。
+      if (nearFeature()) { useNearby(); return; }
       state.mouseDown[0] = true;
       state.breakTimer = 0;
       swingHand();
@@ -2072,7 +2074,8 @@
       actionHeld = false;
       state.mouseDown[0] = false;
     } else if (!cancelled && !actionCancelled && state.mode === 'playing') {
-      doPlace();
+      if (nearFeature()) useNearby();
+      else doPlace();
     }
     actionPointer = null;
     actionCancelled = false;
