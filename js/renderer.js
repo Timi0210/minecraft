@@ -582,8 +582,17 @@ void main() { fragColor = vColor; }`;
       for (let i = 0; i < 6; i++) this.planes.push(new Float32Array(4));
       this.shadowPlanes = [];
       for (let i = 0; i < 6; i++) this.shadowPlanes.push(new Float32Array(4));
-      this.stats = { drawn: 0, faces: 0 };
+      this.stats = { drawn: 0, faces: 0, batches: 0 };
       this._t = 0;
+
+      // 所有区块共用少量大缓冲；可见区块每帧合并成一次 multi-draw。
+      this.pages = [];
+      this.multiDraw = gl.getExtension('WEBGL_multi_draw');
+      // 旧版扩展 5 个参数，新版把数组拆成 (list, offset)，用必填参数个数区分。
+      this.multiDrawArgs = this.multiDraw ? this.multiDraw.multiDrawElementsWEBGL.length : 0;
+      this.transparentPage = null;
+      this.visible = [];
+      this.transparentChunks = [];
 
       gl.enable(gl.DEPTH_TEST);
       gl.enable(gl.CULL_FACE);
@@ -701,19 +710,121 @@ void main() { fragColor = vColor; }`;
     }
 
     uploadChunk(chunk, mesh) {
-      this.disposeChunk(chunk);
+      const previous = chunk.gpu;
       chunk.gpu = {
-        opaque: this.makeMesh(mesh.opaque),
-        transparent: this.makeMesh(mesh.transparent)
+        opaque: this.uploadGeometry(mesh.opaque, previous && previous.opaque, false),
+        transparent: this.uploadGeometry(mesh.transparent, previous && previous.transparent, true)
       };
       chunk.faces = mesh.faces;
     }
 
+    /* 把一块区块的网格写进共享页。编辑后如果面数没变，原地覆写，不重新分配。 */
+    uploadGeometry(data, previous, transparent) {
+      if (!data || data.idx.length === 0 || data.verts.length === 0) {
+        if (previous) this.releaseGeometry(previous);
+        return null;
+      }
+      const vBytes = data.verts.byteLength;
+      const iBytes = data.idx.byteLength;
+      if (previous && vBytes <= previous.vBytes && iBytes <= previous.iBytes) {
+        return this.writeGeometry(previous.page, data, previous);
+      }
+      if (previous) this.releaseGeometry(previous);
+      let page = null;
+      if (transparent) {
+        // 透明面全部放在同一页，排序后才能一次提交。
+        if (!this.transparentPage || !this.transparentPage.canReserve(vBytes, iBytes)) {
+          this.transparentPage = this.createPage(vBytes, iBytes, MC.TRANSPARENT_PAGE_BYTES);
+        }
+        page = this.transparentPage;
+      } else {
+        for (let i = 0; i < this.pages.length; i++) {
+          const candidate = this.pages[i];
+          if (candidate === this.transparentPage) continue;
+          if (candidate.canReserve(vBytes, iBytes)) { page = candidate; break; }
+        }
+      }
+      if (!page) page = this.createPage(vBytes, iBytes);
+      const range = page.reserve(vBytes, iBytes);
+      if (!range) return null;
+      const slot = { page, vOffset: range.vOffset, iOffset: range.iOffset,
+        vBytes, iBytes, count: 0 };
+      page.live++;
+      return this.writeGeometry(page, data, slot);
+    }
+
+    writeGeometry(page, data, slot) {
+      slot.count = data.idx.length;
+      const base = slot.vOffset / MC.VERTEX_BYTES;
+      if (base) {
+        // 索引改写成页内绝对顶点号，绘制时就不需要再设顶点偏移。
+        const idx = data.idx;
+        for (let i = 0; i < idx.length; i++) idx[i] += base;
+      }
+      page.write(data, slot);
+      return slot;
+    }
+
+    releaseGeometry(slot) {
+      const page = slot.page;
+      page.release(slot);
+      if (page.isEmpty()) this.destroyPage(page);
+    }
+
+    createPage(minVertexBytes, minIndexBytes, preferredVertexBytes) {
+      const capacity = preferredVertexBytes || MC.VERTEX_PAGE_BYTES;
+      const vertexBytes = Math.max(capacity,
+        Math.ceil(minVertexBytes / MC.VERTEX_BYTES) * MC.VERTEX_BYTES);
+      const indexBytes = Math.max(MC.MIN_INDEX_PAGE_BYTES,
+        Math.ceil(vertexBytes * MC.INDEX_RATIO / 4) * 4,
+        Math.ceil(minIndexBytes / 4) * 4);
+      const page = new MC.BatchPage(this.gl, vertexBytes, indexBytes);
+      this.pages.push(page);
+      return page;
+    }
+
+    destroyPage(page) {
+      const at = this.pages.indexOf(page);
+      if (at >= 0) this.pages.splice(at, 1);
+      if (page === this.transparentPage) this.transparentPage = null;
+      page.destroy();
+    }
+
     disposeChunk(chunk) {
       if (!chunk.gpu) return;
-      this.disposeMesh(chunk.gpu.opaque);
-      this.disposeMesh(chunk.gpu.transparent);
+      if (chunk.gpu.opaque) this.releaseGeometry(chunk.gpu.opaque);
+      if (chunk.gpu.transparent) this.releaseGeometry(chunk.gpu.transparent);
       chunk.gpu = null;
+    }
+
+    /* 提交一页里已经收集好的可见区间；有 multi-draw 时一页只发一条命令。 */
+    drawBatch(page) {
+      const gl = this.gl;
+      const n = page.counts.length;
+      if (!n) return 0;
+      gl.bindVertexArray(page.vao);
+      if (this.multiDraw && n > 1) {
+        page.pack();
+        if (this.multiDrawArgs >= 7) {
+          // 新版扩展允许把数组拆成 (list, offset) 两段。
+          this.multiDraw.multiDrawElementsWEBGL(gl.TRIANGLES, page.counts32, 0,
+            gl.UNSIGNED_INT, page.offsets32, 0, n);
+        } else {
+          this.multiDraw.multiDrawElementsWEBGL(gl.TRIANGLES, page.counts32,
+            gl.UNSIGNED_INT, page.offsets32, n);
+        }
+        return 1;
+      }
+      for (let j = 0; j < n; j++) {
+        gl.drawElements(gl.TRIANGLES, page.counts[j], gl.UNSIGNED_INT, page.offsets[j]);
+      }
+      return n;
+    }
+
+    flushBatches() {
+      let calls = 0;
+      for (let i = 0; i < this.pages.length; i++) calls += this.drawBatch(this.pages[i]);
+      return calls;
     }
 
     /* ---------- 视锥 ---------- */
@@ -784,15 +895,16 @@ void main() { fragColor = vColor; }`;
       gl.enable(gl.POLYGON_OFFSET_FILL);
       gl.polygonOffset(1.0, 1.0);
 
+      for (let i = 0; i < this.pages.length; i++) this.pages[i].resetBatch();
       for (let i = 0; i < chunks.length; i++) {
         const c = chunks[i];
         if (!c.gpu || !c.gpu.opaque) continue;
         if (Math.abs(c.cx * 16 + 8 - cam.x) > 72 || Math.abs(c.cz * 16 + 8 - cam.z) > 72) continue;
         if (!this.boxVisible(c.cx * 16, 0, c.cz * 16,
           c.cx * 16 + 16, MC.WORLD.HEIGHT, c.cz * 16 + 16, this.shadowPlanes)) continue;
-        gl.bindVertexArray(c.gpu.opaque.vao);
-        gl.drawElements(gl.TRIANGLES, c.gpu.opaque.count, gl.UNSIGNED_INT, 0);
+        c.gpu.opaque.page.add(c.gpu.opaque.count, c.gpu.opaque.iOffset);
       }
+      this.flushBatches();
       if (mobBoxes) {
         for (let i = 0; i < mobBoxes.length; i++) {
           const b = mobBoxes[i];
@@ -913,8 +1025,9 @@ void main() { fragColor = vColor; }`;
       gl.activeTexture(gl.TEXTURE0);
       gl.disable(gl.BLEND);
 
-      let faces = 0, drawn = 0;
-      const transparent = [];
+      let faces = 0, drawn = 0, batches = 0;
+      const transparent = this.transparentChunks;
+      transparent.length = 0;
       if (!under && !nether && this.horizonMesh) {
         this.updateNearMask(chunks, cam);
         gl.uniform3f(u.uFarTiles, MC.BLOCKS[MC.Block.GRASS].tex.top,
@@ -928,19 +1041,30 @@ void main() { fragColor = vColor; }`;
         gl.uniform1f(u.uShadowOn, shadowActive ? 1 : 0);
         drawn++;
       }
+      // 视锥内的区块先按距离排好，再把可见区间并进共享页。
+      const visible = this.visible;
+      visible.length = 0;
       for (let i = 0; i < chunks.length; i++) {
         const c = chunks[i];
         if (!c.gpu) continue;
         const bx = c.cx * 16, bz = c.cz * 16;
         if (!this.boxVisible(bx, 0, bz, bx + 16, MC.WORLD.HEIGHT, bz + 16)) continue;
+        const dx = bx + 8 - cam.x, dz = bz + 8 - cam.z;
+        c.sortDist = dx * dx + dz * dz;
+        visible.push(c);
+      }
+      visible.sort((a, b) => a.sortDist - b.sortDist);
+      for (let i = 0; i < this.pages.length; i++) this.pages[i].resetBatch();
+      for (let i = 0; i < visible.length; i++) {
+        const c = visible[i];
         if (c.gpu.opaque) {
-          gl.bindVertexArray(c.gpu.opaque.vao);
-          gl.drawElements(gl.TRIANGLES, c.gpu.opaque.count, gl.UNSIGNED_INT, 0);
+          c.gpu.opaque.page.add(c.gpu.opaque.count, c.gpu.opaque.iOffset);
           drawn++;
         }
         if (c.gpu.transparent) transparent.push(c);
         faces += c.faces;
       }
+      batches += this.flushBatches();
 
       /* --- 生物 --- */
       if (mobBoxes && mobBoxes.length) {
@@ -990,20 +1114,38 @@ void main() { fragColor = vColor; }`;
 
       /* --- 透明区块（远到近） --- */
       if (transparent.length) {
-        const cx = cam.x, cz = cam.z;
-        transparent.sort((a, b) => {
-          const ax = a.cx * 16 + 8 - cx, az = a.cz * 16 + 8 - cz;
-          const bx = b.cx * 16 + 8 - cx, bz = b.cz * 16 + 8 - cz;
-          return (bx * bx + bz * bz) - (ax * ax + az * az);
-        });
+        // 已经按距离排过，透明面从远往近提交。
+        transparent.sort((a, b) => b.sortDist - a.sortDist);
         gl.enable(gl.BLEND);
         gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
         gl.depthMask(false);
         gl.disable(gl.CULL_FACE);           // 水面/玻璃双面可见
-        for (const c of transparent) {
-          gl.bindVertexArray(c.gpu.transparent.vao);
-          gl.drawElements(gl.TRIANGLES, c.gpu.transparent.count, gl.UNSIGNED_INT, 0);
-          drawn++;
+        const page = transparent[0].gpu.transparent.page;
+        let singlePage = true;
+        for (let i = 1; i < transparent.length; i++) {
+          if (transparent[i].gpu.transparent.page !== page) { singlePage = false; break; }
+        }
+        if (singlePage) {
+          // 全部在同一页时，multi-draw 的提交顺序就是排序后的远近顺序。
+          page.resetBatch();
+          for (let i = 0; i < transparent.length; i++) {
+            const t = transparent[i].gpu.transparent;
+            page.add(t.count, t.iOffset);
+          }
+          batches += this.drawBatch(page);
+          drawn += transparent.length;
+        } else {
+          let boundPage = null;
+          for (const c of transparent) {
+            const t = c.gpu.transparent;
+            if (t.page !== boundPage) {
+              gl.bindVertexArray(t.page.vao);
+              boundPage = t.page;
+            }
+            gl.drawElements(gl.TRIANGLES, t.count, gl.UNSIGNED_INT, t.iOffset);
+            drawn++;
+            batches++;
+          }
         }
         gl.enable(gl.CULL_FACE);
         gl.depthMask(true);
@@ -1081,6 +1223,7 @@ void main() { fragColor = vColor; }`;
 
       this.stats.drawn = drawn;
       this.stats.faces = faces;
+      this.stats.batches = batches;
       this._t = time;
     }
   }

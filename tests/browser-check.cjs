@@ -18,6 +18,17 @@ const { chromium } = require(process.env.MC_PLAYWRIGHT_PATH || 'playwright-core'
     assert.equal(await page.evaluate(() => __mc.touchMode), false);
     assert.equal(await page.evaluate(() => __mc.state.hotbar[0].id), 1);
 
+    // 可见区块应合并进共享页：支持 multi-draw 时绘制命令远少于区块数。
+    const batching = await page.evaluate(() => ({
+      multi: !!__mc.renderer.multiDraw,
+      pages: __mc.renderer.pages.length,
+      batches: __mc.renderer.stats.batches,
+      drawn: __mc.renderer.stats.drawn,
+      gl: __mc.renderer.gl.getError()
+    }));
+    assert.equal(batching.gl, 0);
+    if (batching.multi) assert(batching.batches < batching.drawn, '可见区块应合并成更少的绘制批次');
+
     await page.keyboard.press('e');
     assert.equal(await page.evaluate(() => __mc.state.mode), 'inventory');
     await page.locator('#paletteTabs button').filter({ hasText: '树木' }).click();

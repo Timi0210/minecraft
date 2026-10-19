@@ -20,7 +20,7 @@ const context = vm.createContext({
   console, performance, Math, Uint8Array, Uint32Array, Uint8ClampedArray, Float32Array,
   Int16Array, Map, Set, Array, window: {}, document: { createElement: canvas }
 });
-for (const file of ['noise', 'blocks', 'world', 'mesher', 'renderer',
+for (const file of ['noise', 'blocks', 'world', 'mesher', 'batch', 'renderer',
   'items', 'crafting', 'particles', 'minimap', 'settings', 'horizon', 'mobs']) {
   const source = fs.readFileSync(path.join(root, 'js', file + '.js'), 'utf8');
   vm.runInContext(source, context, { filename: file + '.js' });
@@ -46,6 +46,95 @@ const icon = canvas();
 icon.width = 32;
 MC.itemIcon(icon, 100, 32);
 assert.equal(icon.drawCalls[0][3], 64);
+
+// 共享批次：区间分配不重叠、归还后能合并；索引要改写成页内绝对顶点号。
+const rangePool = new MC.RangePool(120);
+assert.equal(rangePool.alloc(40), 0);
+assert.equal(rangePool.alloc(40), 40);
+assert.equal(rangePool.alloc(40), 80);
+assert.equal(rangePool.alloc(40), -1);
+assert.equal(rangePool.canFit(40), false);
+rangePool.release(40, 40);
+assert.equal(rangePool.canFit(40), true);
+assert.equal(rangePool.alloc(40), 40);
+rangePool.release(0, 40);
+rangePool.release(40, 40);
+rangePool.release(80, 40);
+assert.equal(rangePool.used, 0);
+assert.deepEqual(rangePool.free, [{ offset: 0, size: 120 }]);
+
+const batchUploads = [];
+const glStub = {
+  createBuffer: () => ({}), createVertexArray: () => ({}),
+  bindBuffer() {}, bindVertexArray() {}, enableVertexAttribArray() {},
+  vertexAttribPointer() {}, bufferData() {}, deleteBuffer() {}, deleteVertexArray() {},
+  drawElements(...args) { batchUploads.push({ call: 'drawElements', args }); },
+  bufferSubData(target, offset, data) {
+    batchUploads.push({ call: 'bufferSubData', target, offset, data: Array.from(data) });
+  }
+};
+const batchRenderer = Object.create(MC.Renderer.prototype);
+batchRenderer.gl = glStub;
+batchRenderer.pages = [];
+const slotA = batchRenderer.uploadGeometry({
+  verts: new Float32Array(10 * 10), idx: new Uint32Array([0, 1, 2])
+}, null);
+const slotB = batchRenderer.uploadGeometry({
+  verts: new Float32Array(5 * 10), idx: new Uint32Array([0, 1, 2])
+}, null);
+assert.equal(slotA.vOffset, 0);
+assert.equal(slotB.vOffset, 400);
+assert.deepEqual(slotB.count, 3);
+// 后一块的索引必须补上前一块的 10 个顶点，才能在同一页里解析。
+const lastIndexUpload = batchUploads.filter(u => u.call === 'bufferSubData' && u.data[0] === 10).pop();
+assert.deepEqual(lastIndexUpload.data, [10, 11, 12]);
+assert.equal(batchRenderer.pages.length, 1);
+// 面数变小时原地覆写，不搬家。
+const smaller = batchRenderer.uploadGeometry({
+  verts: new Float32Array(4 * 10), idx: new Uint32Array([0, 1, 2, 1, 2, 3])
+}, slotB);
+assert.equal(smaller.vOffset, slotB.vOffset);
+assert.equal(smaller.count, 6);
+// 可见区间合并成一次 multi-draw；没有扩展时退回逐块绘制。
+const batchPage = batchRenderer.pages[0];
+let multiCalls = 0, multiLast = null;
+const multiStub = {
+  multiDrawElementsWEBGL(...args) { multiCalls++; multiLast = args; }
+};
+// 新版扩展把数组拆成 (list, offset) 两段，共 7 个必填参数。
+batchRenderer.multiDraw = multiStub;
+batchRenderer.multiDrawArgs = 7;
+batchPage.resetBatch();
+batchPage.add(3, slotA.iOffset);
+batchPage.add(6, slotB.iOffset);
+assert.equal(batchRenderer.flushBatches(), 1);
+assert.equal(multiCalls, 1);
+assert.equal(multiLast[6], 2);
+assert.deepEqual(Array.from(multiLast[1]).slice(0, 2), [3, 6]);
+assert.equal(multiLast[2], 0);
+assert.deepEqual(Array.from(multiLast[4]).slice(0, 2), [slotA.iOffset, slotB.iOffset]);
+assert.equal(multiLast[5], 0);
+// 旧版扩展 5 个必填参数，也要能调用。
+batchRenderer.multiDrawArgs = 5;
+batchPage.resetBatch();
+batchPage.add(3, slotA.iOffset);
+batchPage.add(6, slotB.iOffset);
+assert.equal(batchRenderer.flushBatches(), 1);
+assert.equal(multiLast[4], 2);
+assert.deepEqual(Array.from(multiLast[3]).slice(0, 2), [slotA.iOffset, slotB.iOffset]);
+batchRenderer.multiDraw = null;
+batchUploads.length = 0;
+batchPage.resetBatch();
+batchPage.add(3, slotA.iOffset);
+batchPage.add(6, slotB.iOffset);
+assert.equal(batchRenderer.flushBatches(), 2);
+assert.equal(batchUploads.filter(u => u.call === 'drawElements').length, 2);
+// 归还全部区间后整页释放，不会在漫游中越攒越多。
+batchRenderer.releaseGeometry(slotA);
+assert.equal(batchRenderer.pages.length, 1);
+batchRenderer.releaseGeometry(smaller);
+assert.equal(batchRenderer.pages.length, 0);
+console.log('PASS: 共享批次区间分配、索引改写与 multi-draw 合并');
 
 function chunk(cx, cz) {
   return {
