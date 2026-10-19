@@ -102,13 +102,16 @@
       for (let dz = -20; dz <= 22; dz += 4) for (let dx = -31; dx <= 29; dx += 4)
         outpostY = Math.max(outpostY, this.heightAt(outpostX + dx, outpostZ + dz));
       this.outpost = { x: outpostX, z: outpostZ, y: Math.min(112, outpostY + 1) };
-      this.outpostPathEnd = 40;
-      for (let dz = 14; dz <= 40; dz++) {
-        if (this.heightAt(outpostX - 17, outpostZ + dz) >= this.outpost.y - (dz - 11)) {
-          this.outpostPathEnd = dz;
-          break;
+      const entranceDepth = (wallZ, direction) => {
+        for (let distance = 6; distance <= 32; distance++) {
+          if (this.heightAt(outpostX - 17, outpostZ + wallZ + direction * distance) >=
+              this.outpost.y - (distance - 3)) return distance;
         }
-      }
+        return 32;
+      };
+      this.outpostPathEnds = {
+        north: entranceDepth(-13, -1), south: entranceDepth(8, 1)
+      };
       this.outpostChest = { x: outpostX - 21, y: this.outpost.y + 1, z: outpostZ + 1 };
       this.outpostPortal = { x: outpostX + 11, y: this.outpost.y + 3, z: outpostZ - 3 };
       this.netherExit = { x: NETHER_X, z: 0, y: 69 };
@@ -698,7 +701,8 @@
       const site = this.outpost;
       const bx = chunk.cx * CHUNK, bz = chunk.cz * CHUNK;
       if (bx > site.x + 30 || bx + CHUNK - 1 < site.x - 31 ||
-          bz > site.z + Math.max(27, this.outpostPathEnd) || bz + CHUNK - 1 < site.z - 20) return;
+          bz > site.z + Math.max(27, 8 + this.outpostPathEnds.south) ||
+          bz + CHUNK - 1 < site.z - Math.max(20, 13 + this.outpostPathEnds.north)) return;
       const x0 = site.x, z0 = site.z, base = site.y;
       const build = (left, top, right, bottom, floor, wallHeight, doorSide) => {
         const x1 = Math.max(bx, x0 + left), x2 = Math.min(bx + 15, x0 + right);
@@ -749,37 +753,42 @@
         this.put(chunk, x0 + dx, base + 2 + dy, z0 + 10, B.BRICK);
       for (let dy = 1; dy <= 5; dy++) this.put(chunk, x0 + 2, base + 15 + dy, z0 - 13, B.COBBLE);
       this.put(chunk, x0 + 2, base + 21, z0 - 13, B.GLASS);
-      // 正面的大门和木门廊：五格宽的门洞一直通到补给间。
-      for (let dx = -19; dx <= -15; dx++) {
-        for (let dy = 1; dy <= 4; dy++) this.put(chunk, x0 + dx, base + dy, z0 + 8, B.AIR);
-        this.put(chunk, x0 + dx, base + 5, z0 + 8, B.SPRUCE_LOG);
-      }
-      for (const dx of [-20, -14]) {
-        for (let dz = 8; dz <= 9; dz++) for (let dy = 1; dy <= 5; dy++)
-          this.put(chunk, x0 + dx, base + dy, z0 + dz, B.SPRUCE_LOG);
-      }
-      for (let dz = 9; dz <= 11; dz++) for (let dx = -21; dx <= -13; dx++) {
-        this.put(chunk, x0 + dx, base + 6, z0 + dz, B.PLANKS);
-        this.put(chunk, x0 + dx, base + 7, z0 + dz, B.SNOW);
-      }
-      // 平台与台阶按原地形落到雪地，宽度固定，保留足够的头部空间。
-      for (let dz = 9; dz <= this.outpostPathEnd; dz++) {
-        const z = z0 + dz;
-        const stepY = Math.max(this.heightAt(x0 - 17, z), base - Math.max(0, dz - 11));
+      // 朝向雪谷来路的北门和南侧露台共用宽门洞、木门廊与落地台阶。
+      const entrance = (wallZ, direction, endDepth) => {
+        const outsideZ = wallZ + direction;
         for (let dx = -19; dx <= -15; dx++) {
-          const x = x0 + dx, ground = this.heightAt(x, z);
-          for (let y = ground + 1; y < stepY; y++) this.put(chunk, x, y, z, B.COBBLE);
-          this.put(chunk, x, stepY, z, B.PLANKS);
-          for (let y = stepY + 1; y <= Math.max(stepY + 4, ground + 3); y++)
-            this.put(chunk, x, y, z, B.AIR);
+          for (let dy = 1; dy <= 4; dy++) this.put(chunk, x0 + dx, base + dy, z0 + wallZ, B.AIR);
+          this.put(chunk, x0 + dx, base + 5, z0 + wallZ, B.SPRUCE_LOG);
         }
-        if (dz <= this.outpostPathEnd - 2) for (const dx of [-20, -14]) {
-          const x = x0 + dx, ground = this.heightAt(x, z);
-          for (let y = ground + 1; y <= stepY; y++) this.put(chunk, x, y, z, B.COBBLE);
-          this.put(chunk, x, stepY + 1, z, B.SPRUCE_LOG);
+        for (const dx of [-20, -14]) for (const z of [wallZ, outsideZ])
+          for (let dy = 1; dy <= 5; dy++) this.put(chunk, x0 + dx, base + dy, z0 + z, B.SPRUCE_LOG);
+        for (let distance = 1; distance <= 3; distance++) for (let dx = -21; dx <= -13; dx++) {
+          const z = z0 + wallZ + direction * distance;
+          this.put(chunk, x0 + dx, base + 6, z, B.PLANKS);
+          this.put(chunk, x0 + dx, base + 7, z, B.SNOW);
         }
-      }
-      for (const dx of [-20, -14]) this.put(chunk, x0 + dx, base + 2, z0 + 10, B.TORCH);
+        // 五格宽的步道贴着原有雪坡落地，路面上方始终留出四格空间。
+        for (let distance = 1; distance <= endDepth; distance++) {
+          const z = z0 + wallZ + direction * distance;
+          const stepY = Math.max(this.heightAt(x0 - 17, z), base - Math.max(0, distance - 3));
+          for (let dx = -19; dx <= -15; dx++) {
+            const x = x0 + dx, ground = this.heightAt(x, z);
+            for (let y = ground + 1; y < stepY; y++) this.put(chunk, x, y, z, B.COBBLE);
+            this.put(chunk, x, stepY, z, B.PLANKS);
+            for (let y = stepY + 1; y <= Math.max(stepY + 4, ground + 3); y++)
+              this.put(chunk, x, y, z, B.AIR);
+          }
+          if (distance <= endDepth - 2) for (const dx of [-20, -14]) {
+            const x = x0 + dx, ground = this.heightAt(x, z);
+            for (let y = ground + 1; y <= stepY; y++) this.put(chunk, x, y, z, B.COBBLE);
+            this.put(chunk, x, stepY + 1, z, B.SPRUCE_LOG);
+          }
+        }
+        for (const dx of [-20, -14]) this.put(chunk, x0 + dx, base + 2,
+          z0 + wallZ + direction * 2, B.TORCH);
+      };
+      entrance(-13, -1, this.outpostPathEnds.north);
+      entrance(8, 1, this.outpostPathEnds.south);
       // 主屋和传送门房之间的封闭连廊，用两级缓坡消化地板高度差。
       for (let dx = -3; dx <= 2; dx++) for (let dz = -2; dz <= 2; dz++) {
         const x = x0 + dx, z = z0 + dz;
