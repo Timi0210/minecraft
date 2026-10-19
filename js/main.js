@@ -1057,7 +1057,7 @@
         return;
       }
       player.pos[0] = dest.x + 1.5;
-      player.pos[1] = goingDown ? dest.y : dest.y;
+      player.pos[1] = dest.y;
       player.pos[2] = dest.z + 3.5;
       player.vel.fill(0);
       player.yaw = Math.PI;

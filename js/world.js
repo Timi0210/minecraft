@@ -760,6 +760,7 @@
       this.put(chunk, x0 - 20, base + 2, z0 - 9, B.TORCH);
       // 另一间房里的传送门与雪谷形成鲜明的色彩对照。
       this.placePortal(chunk, this.outpostPortal.x, this.outpostPortal.y, this.outpostPortal.z, false);
+      this.put(chunk, x0 + 20, base + 5, z0 - 8, B.TORCH);
     }
 
     decorateCaves(chunk) {

@@ -937,7 +937,7 @@
     { name: '丢失的贴图', solid: 1, opaque: 1, tex: { all: 'glitch' } },
     { name: '旗帜', solid: 1, opaque: 1, tex: { all: 'banner' } },
     { name: '下界岩', solid: 1, opaque: 1, tex: { all: 'netherrack' } },
-    { name: '熔岩', solid: 0, opaque: 0, liquid: 1, transparent: 1, light: 12, tex: { all: 'lava' } },
+    { name: '熔岩', solid: 0, opaque: 0, liquid: 1, transparent: 1, tex: { all: 'lava' } },
     { name: '黑曜石', solid: 1, opaque: 1, tex: { all: 'obsidian' } },
     { name: '下界传送门', solid: 0, opaque: 0, transparent: 1, tex: { all: 'portal' } },
     { name: '雪谷补给箱', solid: 1, opaque: 1, tex: { top: 'supply_top', side: 'supply_side', bottom: 'supply_top' } },
@@ -1096,7 +1096,20 @@
     40: { hard: -1 },
     41: { hard: -1 },
     42: { hard: -1 },
-    43: { hard: 0.2, tool: 'axe' }
+    43: { hard: 0.2, tool: 'axe' },
+    44: { hard: 0.5, tool: 'pickaxe' },
+    45: { hard: -1 },
+    46: { hard: 6, tool: 'pickaxe' },
+    47: { hard: -1 },
+    48: { hard: -1 },
+    49: { hard: 0.5, tool: 'shovel' },
+    50: { hard: 2, tool: 'pickaxe' },
+    51: { hard: 1.5, tool: 'axe' },
+    52: { hard: 0.3, tool: 'axe' },
+    53: { hard: 1.5, tool: 'axe' },
+    54: { hard: 0.3, tool: 'axe' },
+    55: { hard: 1.5, tool: 'pickaxe' },
+    56: { hard: 2.5, tool: 'pickaxe' }
   };
   MC.MINE = MINE;
 
