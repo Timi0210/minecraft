@@ -932,6 +932,8 @@
     { name: '黏土', solid: 1, opaque: 1, tex: { all: 'clay' } },
     { name: '滴水石块', solid: 1, opaque: 1, tex: { all: 'dripstone' } },
     { name: '火把', solid: 0, opaque: 0, light: 14, tex: { top: 'torch_top', side: 'torch_side', bottom: 'torch_side' } },
+    // 40–43 是旧彩蛋留下的方块。编号保留，以免改动旧存档里的方块 id；
+    // 世界里不再生成它们，也不出现在素材盘里。
     { name: '石中剑', solid: 1, opaque: 1, tex: { top: 'sword_stone_top', side: 'sword_stone_side', bottom: 'sword_stone_side' } },
     { name: '石碑', solid: 1, opaque: 1, tex: { all: 'tablet' } },
     { name: '丢失的贴图', solid: 1, opaque: 1, tex: { all: 'glitch' } },

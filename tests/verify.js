@@ -18,13 +18,18 @@ const canvas = () => {
 };
 const context = vm.createContext({
   console, performance, Math, Uint8Array, Uint32Array, Uint8ClampedArray, Float32Array,
-  Int16Array, Map, Set, Array, window: {}, document: { createElement: canvas }
+  Int16Array, Map, Set, Array, setTimeout: () => 0,
+  window: {}, document: { createElement: canvas }
 });
 for (const file of ['noise', 'blocks', 'world', 'mesher', 'batch', 'renderer',
   'items', 'crafting', 'particles', 'minimap', 'settings', 'horizon', 'mobs']) {
   const source = fs.readFileSync(path.join(root, 'js', file + '.js'), 'utf8');
   vm.runInContext(source, context, { filename: file + '.js' });
 }
+// secrets.js 在加载时读 MC.DAY_LENGTH（浏览器里由 renderer.js 提供）。
+context.window.MC.DAY_LENGTH = 1200;
+vm.runInContext(fs.readFileSync(path.join(root, 'js', 'secrets.js'), 'utf8'), context,
+  { filename: 'secrets.js' });
 const MC = context.window.MC;
 
 // 图集应输出含有真实子像素细节的 64px 材质，图标也从新图集裁切。
@@ -158,7 +163,7 @@ function lightWorld(minX, maxX, minZ, maxZ) {
 }
 
 assert.equal(MC.BLOCKS.length, 57);
-assert.equal(MC.ALL_ITEMS.length, 99);
+assert.equal(MC.ALL_ITEMS.length, 97);
 assert.equal(MC.RECIPES.length, 36);
 assert.equal(MC.BLOCKS[MC.Block.TORCH].light, 14);
 assert.equal(MC.BLOCKS[MC.Block.TABLET].name, '石碑');
@@ -172,8 +177,6 @@ assert.equal(MC.MINE[MC.Block.PORTAL].hard, -1);
 assert(MC.Atlas.index.ember_face < 256);
 assert.equal(MC.MINE[MC.Block.TABLET].hard, -1);
 assert.equal(MC.MINE[MC.Block.STONE_SWORD].hard, -1);
-assert(MC.SECRET_ITEMS.has(MC.ITEM_KEY.broken_steel));
-assert(MC.SECRET_ITEMS.has(MC.ITEM_KEY.moon_wool));
 assert.equal(MC.itemTool(120).maxDur, 59);
 assert.equal(MC.itemTool(140).maxDur, 1561);
 const torchRecipe = MC.RECIPES.find(r => r.out.id === MC.Block.TORCH);
@@ -382,14 +385,14 @@ const saveFactory = new Function('world', 'state', 'localStorage', 'player', `
 `);
 const save = saveFactory({ saveData: () => ({ seed: 2024, edits: [] }) }, {
   bag: [inventory.stack(120, 1, 17)], hotbar: [inventory.stack(1, 3)],
-  time: 1, seen: { origin: true }, flags: { swordPulled: true }, explored: [[1, 2]]
+  time: 1, seen: { easel: true }, flags: { keyStage: 1 }, explored: [[1, 2]]
 }, { setItem: (key, value) => {
   assert.equal(key, 'mcweb.save.v1'); savedJson = value;
 } }, { pos: [222.5, 91, 217.5], yaw: 1.2, pitch: -0.3, flying: true });
 save(true);
 assert.equal(JSON.parse(savedJson).inv[0][2], 17);
 assert.deepEqual(JSON.parse(savedJson).player.pos, [222.5, 91, 217.5]);
-assert.equal(JSON.parse(savedJson).secrets.origin, true);
+assert.equal(JSON.parse(savedJson).secrets.easel, true);
 assert.deepEqual(JSON.parse(savedJson).explored, [[1, 2]]);
 const restoreFactory = new Function('MC', 'world', 'saved', 'seed', `
   ${between('  const player = new MC.Player(world);', '  const mobManager')}
@@ -438,12 +441,16 @@ minimap.startBuild({ pos: [0, 60, 0] });
 assert.equal(minimap.previewReady, true);
 assert.equal(minimap.ready, false);
 
-// 开放世界站点：每个种子都有可发现的注脚，说明石碑覆盖多种群系。
+// 开放世界的站点：六个彩蛋里四个有实体，旧彩蛋不再出现。
 const open = new MC.World(2024);
-assert.equal(open.sites.filter(s => s.type === 'tablet').length, 9);
-assert.equal(open.sites.filter(s => s.type === 'origin').length, 1);
-assert(open.sites.some(s => s.type === 'cabin'));
+for (const type of ['easel', 'well', 'shoes', 'key']) {
+  assert(open.sites.some(s => s.type === type), '缺少彩蛋站点 ' + type);
+}
 assert(open.sites.some(s => s.type === 'giant'));
+assert(!open.sites.some(s => s.type === 'origin'));
+assert(!open.sites.some(s => s.type === 'tablet'));
+assert(!open.sites.some(s => s.type === 'cabin'));
+assert(!open.sites.some(s => s.type === 'ship'));
 assert(!open.sites.some(s => s.type === 'guardian'));
 // 新冰川谷应是可进入的雪原，后方主峰高出谷底，且峰顶仍在世界高度内。
 const glacier = open.glacier;
@@ -454,18 +461,112 @@ assert(open.glacierWeight(glacier.x, glacier.z) > 0.8);
 assert(summitY - valleyY >= 48);
 assert(summitY < MC.WORLD.HEIGHT - 8);
 assert(open.outpost.y + 22 < MC.WORLD.HEIGHT);
-assert(open.biomeField(980, 260).mountain > 0.7);
-assert(open.heightAt(980, 260) > 78);
+assert.equal(open.biomeAt(summitX, summitZ, summitY), 'mountain');
+// 区域地貌排列随种子打乱，但同一个种子稳定，并且每个 3×3 区域仍有全部九种地貌。
+const layoutA = open.superBiomes(3, -2);
+assert.equal(new Set(layoutA).size, 9);
+assert.deepEqual(open.superBiomes(3, -2), layoutA);
+const otherWorld = new MC.World(2025);
+assert.notDeepEqual(otherWorld.superBiomes(3, -2), layoutA);
+// 散落的小建筑：选址可重复得到同一结果，并且在对应区块里真的建出来。
+let randomSite = null;
+for (let gz = -2; gz <= 2 && !randomSite; gz++)
+  for (let gx = -2; gx <= 2 && !randomSite; gx++) randomSite = open.randomSiteFor(gx, gz);
+assert(randomSite && randomSite.type, '应能找到随机小建筑');
+assert.deepEqual(open.randomSiteFor(Math.floor(randomSite.x / 176), Math.floor(randomSite.z / 176)), randomSite);
+open.ensureChunk(randomSite.x >> 4, randomSite.z >> 4);
+assert(open.getBlock(randomSite.x, randomSite.y, randomSite.z) !== 0, '随机建筑应写入方块');
+// 出生点周围不放树，避免一睁眼卡在树干里。
+open.ensureChunk(open.spawn.x >> 4, open.spawn.z >> 4);
+const spawnX = Math.floor(open.spawn.x), spawnZ = Math.floor(open.spawn.z);
+for (let dz = -4; dz <= 4; dz++) for (let dx = -4; dx <= 4; dx++)
+  for (let y = open.heightAt(spawnX + dx, spawnZ + dz) + 1; y < open.heightAt(spawnX, spawnZ) + 24; y++) {
+    const id = open.getBlock(spawnX + dx, y, spawnZ + dz);
+    assert(id !== MC.Block.LOG && id !== MC.Block.LEAVES &&
+      id !== MC.Block.SPRUCE_LOG && id !== MC.Block.SPRUCE_LEAVES, '出生点附近不应有树');
+  }
 for (const [x, z, expected] of [[glacier.x, glacier.z, MC.Block.SNOW],
   [summitX, summitZ, MC.Block.STONE]]) {
   open.ensureChunk(x >> 4, z >> 4);
   assert.equal(open.getBlock(x, open.heightAt(x, z), z), expected);
 }
-open.ensureChunk(0, 0);
-assert.equal(open.getBlock(0, open.sites.find(s => s.type === 'origin').y + 1, 0), MC.Block.TABLET);
-assert(open.lore.size >= 1);
+// 画架的画布确实立在站点上，不是只登记了一个坐标。
+const easel = open.sites.find(s => s.type === 'easel');
+open.ensureChunk(easel.x >> 4, easel.z >> 4);
+assert.equal(open.getBlock(easel.x, easel.y + 2, easel.z), MC.Block.WHITE_TERRACOTTA);
+const keySite = open.sites.find(s => s.type === 'key');
+open.ensureChunk(keySite.x >> 4, keySite.z >> 4);
+assert.equal(open.getBlock(keySite.x, keySite.y + 3, keySite.z), MC.Block.STONE);
+assert.equal(open.lore, undefined);
 
-console.log('PASS: 火把/遮光/跨区块/读档与位置恢复、配方/耐久、动物网格、粒子池与单次绘制、小地图预览、开放世界站点');
+// 彩蛋运行时：六个条目、四处可以按 R 互动，石堆要搬三次。
+const eggEvents = [];
+const eggPlayer = {
+  pos: [open.spawn.x, open.heightAt(Math.floor(open.spawn.x), Math.floor(open.spawn.z)) + 2, open.spawn.z],
+  yaw: 0, pitch: 0,
+  eye() { return [this.pos[0], this.pos[1] + 1.62, this.pos[2]]; }
+};
+const eggState = { time: MC.DAY_LENGTH * 0.55, seen: {}, flags: {} };
+const secrets = new MC.Secrets({
+  world: open, player: eggPlayer, state: eggState,
+  sfx: { tone() {}, noise() {} },
+  particles: { enabled: false, emit() {} },
+  hooks: {
+    read: lore => eggEvents.push(lore.title), save() {},
+    setBlock: (x, y, z, id) => open.setBlock(x, y, z, id)
+  }
+});
+assert.equal(secrets.list().length, 6);
+assert.deepEqual(secrets.list().map(e => e.name),
+  ['无人认领的画架', '会回答的井', '海边的一双鞋', '石堆里的钥匙', '夜里的摄影师', '萤火引路']);
+for (const type of ['easel', 'well', 'shoes', 'key']) {
+  const site = open.sites.find(s => s.type === type);
+  eggPlayer.pos = [site.x + 0.5, site.y, site.z + 3.5];
+  assert(secrets.nearby(), '走近 ' + type + ' 应出现提示');
+  const lore = secrets.use(type);
+  assert(lore && lore.text.length > 20, type + ' 应返回一段手记');
+}
+assert.equal(eggState.flags.keyStage, 1);
+assert.equal(open.getBlock(keySite.x, keySite.y + 3, keySite.z), 0, '第一块石头应被搬开');
+secrets.use('key');
+secrets.use('key');
+assert.equal(eggState.flags.keyStage, 3);
+assert.equal(open.getBlock(keySite.x, keySite.y + 3, keySite.z), MC.Block.STONE,
+  '读完最后一段后石堆应被压回去');
+assert(eggState.seen.key && eggState.seen.easel && eggState.seen.well && eggState.seen.shoes);
+
+// 动物：不会在树冠上生成，受伤后会跑开，前方悬崖/水边会掉头。
+const flatWorld = { getBlock: (x, y) => y < 60 ? MC.Block.STONE : 0 };
+const walker = new MC.Mob('sheep', 0.5, 60, 0.5);
+walker.yaw = 0;
+assert.equal(walker.aheadUnsafe(flatWorld), false);
+const cliffWorld = { getBlock: (x, y, z) => (z > -1 && y < 60) ? MC.Block.STONE : 0 };
+assert.equal(walker.aheadUnsafe(cliffWorld), true);
+walker.hurt(1, 0, 0);
+assert(walker.panic > 0);
+assert.equal(walker.mode, 'walk');
+
+const leafyWorld = {
+  isNether: () => false,
+  heightAt: () => 60,
+  biomeAt: () => 'plains',
+  getChunk: () => ({ generated: true }),
+  getBlock: (x, y, z) => y < 60 ? MC.Block.STONE : y === 60 ? MC.Block.LEAVES : 0
+};
+const leafyMobs = new MC.MobManager(leafyWorld);
+assert.equal(leafyMobs.trySpawn([0, 61, 0]), null, '不应生成在树叶上');
+const grassWorld = {
+  isNether: () => false,
+  heightAt: () => 60,
+  biomeAt: () => 'plains',
+  getChunk: () => ({ generated: true }),
+  getBlock: (x, y, z) => y < 60 ? MC.Block.STONE : y === 60 ? MC.Block.GRASS : 0
+};
+const grassMobs = new MC.MobManager(grassWorld);
+const spawned = grassMobs.trySpawn([0, 61, 0]);
+assert(spawned && spawned.pos[1] === 61, '应生成在草方块地表');
+
+console.log('PASS: 火把/遮光/跨区块/读档与位置恢复、配方/耐久、动物网格与生成、粒子池与单次绘制、小地图预览、开放世界与随机建筑');
 
 // 偏好不会污染世界存档，损坏字段与不可用存储均可降级。
 const preferences = new Map([['mcweb.save.v1', 'untouched']]);

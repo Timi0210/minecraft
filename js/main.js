@@ -26,10 +26,10 @@
   let saved = null;
   try { saved = JSON.parse(localStorage.getItem(SAVE_KEY) || 'null'); } catch (e) { saved = null; }
   if (!saved || !Array.isArray(saved.edits)) saved = null;
-  if (saved && saved.terrainVersion !== 5) {
+  if (saved && saved.terrainVersion !== 6) {
     // Terrain changes under old builds; keep a restorable copy before migration.
     try {
-      const backupKey = SAVE_KEY + '.before-terrain-v5';
+      const backupKey = SAVE_KEY + '.before-terrain-v6';
       if (!localStorage.getItem(backupKey)) localStorage.setItem(backupKey, JSON.stringify(saved));
     } catch (e) { /* storage may be unavailable */ }
   }
@@ -57,7 +57,8 @@
     if (!Array.isArray(list)) return out;
     for (let i = 0; i < size && i < list.length; i++) {
       const v = list[i];
-      if (Array.isArray(v) && v.length >= 2 && v[0] > 0 && v[1] > 0)
+      if (Array.isArray(v) && v.length >= 2 && v[0] > 0 && v[1] > 0 &&
+          MC.itemById(v[0]))
         out[i] = stack(v[0], v[1], v[2]);
     }
     return out;
@@ -71,7 +72,7 @@
     if (p.length === 3 && p.every(Number.isFinite) &&
         Math.abs(p[0]) < 1000000 && p[1] >= -10 && p[1] < 256 && Math.abs(p[2]) < 1000000) {
       player.pos[0] = p[0]; player.pos[1] = p[1]; player.pos[2] = p[2];
-      if (saved.terrainVersion !== 5 && !saved.player.flying &&
+      if (saved.terrainVersion !== 6 && !saved.player.flying &&
           !world.isCave(Math.floor(p[0]), Math.floor(p[1]), Math.floor(p[2]))) {
         const floor = world.heightAt(Math.floor(p[0]), Math.floor(p[2])) + 1.2;
         if (player.pos[1] < floor - 0.5) player.pos[1] = floor;
@@ -164,6 +165,7 @@
     jump: false, descend: false, sprint: false, moveX: 0, moveZ: 0 };
   const touchState = { stickX: 0, stickY: 0, jump: false, descend: false,
     lookId: null, lookX: 0, lookY: 0, stickId: null };
+  let actionTimer = null, actionHeld = false, actionPointer = null, actionCancelled = false;
 
   /* ================= 音效 ================= */
   /* 每种方块一套音色：噪声中心频率 / Q / 音量 / 低音敲击 */
@@ -436,15 +438,13 @@
   const readEl = $('read');
   const readTitleEl = $('readTitle');
   const readTextEl = $('readText');
-  const auroraEl = $('aurora');
-  const meteorsEl = $('meteors');
   const flashEl = $('flash');
   const touchEl = $('touch');
   const touchLookEl = $('touchLook');
   const stickBaseEl = $('stickBase');
   const stickKnobEl = $('stickKnob');
+  const stickZoneEl = $('stickZone');
   const touchHintEl = $('touchHint');
-  const touchMineEl = $('touchMine');
   const touchPlaceEl = $('touchPlace');
   const touchJumpEl = $('touchJump');
   const touchFlyEl = $('touchFly');
@@ -715,8 +715,12 @@
       ctx.fillText('栖野  /  WILD STUDIO', w - 17, h + 32);
       const url = postcard.toDataURL('image/jpeg', .78);
       photos.push({ id: Date.now() + '-' + Math.random().toString(36).slice(2, 6), title, clock, url });
+      const extra = secrets && secrets.photoTaken ? secrets.photoTaken() : null;
+      if (extra) photos.push(extra);
       if (photos.length > 10) photos = photos.slice(-10);
-      toast(persistPhotos() ? '这一刻已放进相册' : '照片暂时无法保存');
+      const saved = persistPhotos();
+      toast(extra ? '相册里多了一张不是你拍的照片' :
+        (saved ? '这一刻已放进相册' : '照片暂时无法保存'));
     } catch (_) { toast('拍照失败，请再试一次'); }
   }
 
@@ -937,7 +941,6 @@
   const nearbyActionHint = $('nearbyActionHint');
   const lootEl = $('loot');
   const lootItems = $('lootItems');
-  const lootTake = $('lootTake');
   const travelCurtain = $('travelCurtain');
   const SUPPLY = [
     { id: MC.ITEM_KEY.bread, count: 6 },
@@ -951,27 +954,54 @@
   let portalCooldown = 0;
   let portalDwell = 0;
 
+  let nearbyEgg = null;
+
   function nearFeature() {
+    // 彩蛋不进入任何列表：走近了才出现一行提示。
+    nearbyEgg = secrets ? secrets.nearby() : null;
+    if (nearbyEgg) return 'egg';
+    // 传送门不再需要按钮：走进门里就会自动穿越。
+    if (world.isNether(player.pos[0], player.pos[2])) return null;
     const x = player.pos[0], y = player.pos[1], z = player.pos[2];
-    const p = world.isNether(x, z) ? world.netherExit : world.outpostPortal;
-    const px = p.x + 1.5, py = p.y + 1, pz = p.z + 0.5;
-    if ((x - px) ** 2 + (y - py) ** 2 + (z - pz) ** 2 < 5.4 ** 2) return 'portal';
-    if (!world.isNether(x, z)) {
-      const c = world.outpostChest;
-      if ((x - c.x - 0.5) ** 2 + (y - c.y) ** 2 + (z - c.z - 0.5) ** 2 < 4.2 ** 2) return 'chest';
-    }
+    const c = world.outpostChest;
+    if ((x - c.x - 0.5) ** 2 + (y - c.y) ** 2 + (z - c.z - 0.5) ** 2 < 4.2 ** 2) return 'chest';
     return null;
   }
 
   function updateNearbyAction() {
     const feature = state.mode === 'playing' ? nearFeature() : null;
-    if (feature === nearbyFeature) return;
-    nearbyFeature = feature;
-    nearbyAction.classList.toggle('hide', !feature);
+    if (feature !== nearbyFeature) {
+      nearbyFeature = feature;
+      nearbyAction.classList.toggle('hide', !feature);
+    }
     if (!feature) return;
-    nearbyActionTitle.textContent = feature === 'portal' ?
-      (world.isNether(player.pos[0], player.pos[2]) ? '返回主世界' : '进入下界') : '打开雪谷补给箱';
-    nearbyActionHint.textContent = feature === 'portal' ? '穿越紫色传送门' : '查看屋里留下的物品';
+    if (feature === 'egg' && nearbyEgg) {
+      nearbyActionTitle.textContent = nearbyEgg.title;
+      nearbyActionHint.textContent = nearbyEgg.hint;
+      return;
+    }
+    nearbyActionTitle.textContent = '打开雪谷补给箱';
+    nearbyActionHint.textContent = '查看屋里留下的物品';
+  }
+
+  // 传送门是一块 2×3 的门面；玩家身体任何部分碰到门面都算走进去。
+  function portalRect() {
+    const p = world.isNether(player.pos[0], player.pos[2]) ? world.netherExit : world.outpostPortal;
+    return { x0: p.x + 1, x1: p.x + 3, y0: p.y + 1, y1: p.y + 4, z0: p.z, z1: p.z + 1 };
+  }
+
+  function insidePortalVolume() {
+    const v = portalRect();
+    const r = player.radius;
+    const overlap = player.pos[0] + r > v.x0 && player.pos[0] - r < v.x1 &&
+      player.pos[1] + player.height > v.y0 && player.pos[1] < v.y1 &&
+      player.pos[2] + r > v.z0 && player.pos[2] - r < v.z1;
+    if (!overlap) return false;
+    // 门框被拆掉之后就不再穿越，和原版一样。
+    const p = world.isNether(player.pos[0], player.pos[2]) ? world.netherExit : world.outpostPortal;
+    for (let dx = 1; dx <= 2; dx++) for (let dy = 1; dy <= 3; dy++)
+      if (world.getBlock(p.x + dx, p.y + dy, p.z) === MC.Block.PORTAL) return true;
+    return false;
   }
 
   function remainingSupply() {
@@ -985,8 +1015,13 @@
     const remains = remainingSupply();
     lootItems.replaceChildren();
     for (let i = 0; i < SUPPLY.length; i++) {
-      const item = SUPPLY[i], cell = document.createElement('div');
+      const item = SUPPLY[i], cell = document.createElement('button');
+      cell.type = 'button';
       cell.className = 'lootItem';
+      cell.disabled = !remains[i];
+      cell.dataset.index = String(i);
+      cell.setAttribute('aria-label', remains[i] ?
+        '拿走 ' + MC.itemName(item.id) + ' × ' + remains[i] : MC.itemName(item.id) + ' 已收下');
       const icon = document.createElement('canvas');
       MC.itemIcon(icon, item.id, 64);
       const name = document.createElement('span');
@@ -996,8 +1031,6 @@
       cell.append(icon, name, count);
       lootItems.appendChild(cell);
     }
-    lootTake.disabled = !remains.some(Boolean);
-    lootTake.textContent = lootTake.disabled ? '物品已收下' : '收下物品';
   }
 
   function openSupply() {
@@ -1018,18 +1051,18 @@
     if (relock) requestLock();
   }
 
-  function takeSupply() {
+  // 一次只拿一样：点哪个格子就拿走那一摞，不再有「全部收下」。
+  function takeSupply(index) {
     const remains = remainingSupply();
-    let received = 0;
-    for (let i = 0; i < SUPPLY.length; i++) {
-      const got = addToBag(SUPPLY[i].id, remains[i]);
-      remains[i] -= got;
-      received += got;
-    }
+    const item = SUPPLY[index];
+    if (!item || !remains[index]) return;
+    const got = addToBag(item.id, remains[index]);
+    if (!got) { toast('背包已满'); return; }
+    remains[index] -= got;
     state.flags.outpostSupply = remains;
     dirtySave = true;
     renderSupply();
-    toast(received ? '补给已放入背包' : '背包已满');
+    toast('拿走了 ' + MC.itemName(item.id) + ' × ' + got);
     saveWorld(true);
   }
 
@@ -1077,13 +1110,21 @@
 
   function useNearby() {
     const feature = nearFeature();
-    if (feature === 'portal') travelPortal();
-    else if (feature === 'chest') openSupply();
+    if (feature === 'chest') { openSupply(); return; }
+    if (feature === 'egg' && nearbyEgg && secrets) {
+      const lore = secrets.use(nearbyEgg.id);
+      if (lore) openRead(lore);
+    }
   }
 
   nearbyAction.addEventListener('click', useNearby);
   $('lootClose').addEventListener('click', () => closeSupply(true));
-  lootTake.addEventListener('click', takeSupply);
+  lootItems.addEventListener('click', e => {
+    const cell = e.target.closest ? e.target.closest('.lootItem') : null;
+    if (!cell || cell.disabled) return;
+    const i = Number(cell.dataset.index);
+    if (Number.isInteger(i)) takeSupply(i);
+  });
   lootEl.addEventListener('click', e => { if (e.target === lootEl) closeSupply(true); });
 
   function addStackToBag(st) {
@@ -1330,7 +1371,7 @@
 
   if (typeof Worker !== 'undefined') {
     try {
-      terrainWorker = new Worker('js/terrain-worker.js?v=1');
+      terrainWorker = new Worker('js/terrain-worker.js?v=2');
       terrainWorker.onmessage = event => {
         const result = event.data;
         if (result.type === 'ready') { terrainReady = true; return; }
@@ -1401,6 +1442,7 @@
   function stream() {
     const pcx = Math.floor(player.pos[0] / 16);
     const pcz = Math.floor(player.pos[2] / 16);
+    planRandomSites(pcx, pcz);
     if (terrainWorker) {
       if (!terrainReady || terrainJob) return;
       for (let i = 0; i < OFFSETS_GEN.length; i++) {
@@ -1538,8 +1580,7 @@
     sfx.noise(210, 0.09, 0.9, 0.11, 0.8);
     animalSound(mob.type, 0.10);
     if (defeated) {
-      const drop = mob.moonlit ? MC.ITEM_KEY.moon_wool :
-        mob.type === 'sheep' ? MC.Block.WOOL :
+      const drop = mob.type === 'sheep' ? MC.Block.WOOL :
         mob.type === 'cow' ? MC.ITEM_KEY.raw_beef :
         mob.type === 'pig' ? MC.ITEM_KEY.raw_pork :
         mob.type === 'rabbit' || mob.type === 'fox' ? MC.ITEM_KEY.leather :
@@ -1819,7 +1860,16 @@
     state.touchMode = touchMode;
   }
 
+  function cancelAction() {
+    if (actionTimer) { clearTimeout(actionTimer); actionTimer = null; }
+    if (actionHeld) { actionHeld = false; state.mouseDown[0] = false; }
+    actionPointer = null;
+    actionCancelled = false;
+    touchPlaceEl.classList.remove('active');
+  }
+
   function resetTouchControls() {
+    cancelAction();
     touchState.stickX = 0;
     touchState.stickY = 0;
     touchState.jump = false;
@@ -1827,8 +1877,11 @@
     touchState.stickId = null;
     touchState.lookId = null;
     stickKnobEl.style.transform = '';
-    stickBaseEl.classList.remove('active');
-    for (const el of [touchMineEl, touchPlaceEl, touchJumpEl, touchDownEl]) el.classList.remove('active');
+    stickBaseEl.classList.remove('active', 'floating');
+    stickBaseEl.style.left = '';
+    stickBaseEl.style.top = '';
+    stickBaseEl.style.bottom = '';
+    for (const el of [touchPlaceEl, touchJumpEl, touchDownEl]) el.classList.remove('active');
     // 桌面模式不要碰鼠标状态，否则会打断长按挖掘。
     if (touchMode) state.mouseDown[0] = state.mouseDown[1] = false;
   }
@@ -1937,17 +1990,29 @@
   touchLookEl.addEventListener('pointercancel', endLook);
   touchLookEl.addEventListener('lostpointercapture', endLook);
 
-  /* 摇杆：左拇指，0–1 的模拟量 */
-  function stickStart(e) {
+  /* 摇杆：左半屏热区，手指落在哪里，摇杆就浮到哪里。 */
+  function stickStart(e, floating) {
     if (!touchMode || state.mode !== 'playing' || touchState.stickId !== null) return;
     e.preventDefault();
     touchState.stickId = e.pointerId;
-    const rect = stickBaseEl.getBoundingClientRect();
-    touchState.stickCx = rect.left + rect.width / 2;
-    touchState.stickCy = rect.top + rect.height / 2;
-    touchState.stickMax = rect.width * 0.36;
+    const width = stickBaseEl.offsetWidth || 104;
+    const height = stickBaseEl.offsetHeight || width;
+    if (floating) {
+      // 手指按下的位置就是摇杆中心；底座跟着过去，而不是钉在左下角。
+      stickBaseEl.classList.add('floating');
+      stickBaseEl.style.left = (e.clientX - width / 2) + 'px';
+      stickBaseEl.style.top = (e.clientY - height / 2) + 'px';
+      stickBaseEl.style.bottom = 'auto';
+      touchState.stickCx = e.clientX;
+      touchState.stickCy = e.clientY;
+    } else {
+      const rect = stickBaseEl.getBoundingClientRect();
+      touchState.stickCx = rect.left + rect.width / 2;
+      touchState.stickCy = rect.top + rect.height / 2;
+    }
+    touchState.stickMax = Math.max(24, width * 0.36);
     stickBaseEl.classList.add('active');
-    try { stickBaseEl.setPointerCapture(e.pointerId); } catch (_) { /* ignore */ }
+    try { e.currentTarget.setPointerCapture(e.pointerId); } catch (_) { /* ignore */ }
     stickMove(e);
   }
   function stickMove(e) {
@@ -1968,28 +2033,56 @@
     touchState.stickX = 0;
     touchState.stickY = 0;
     stickKnobEl.style.transform = '';
-    stickBaseEl.classList.remove('active');
+    stickBaseEl.classList.remove('active', 'floating');
+    stickBaseEl.style.left = '';
+    stickBaseEl.style.top = '';
+    stickBaseEl.style.bottom = '';
   }
-  stickBaseEl.addEventListener('pointerdown', stickStart);
-  stickBaseEl.addEventListener('pointermove', stickMove);
-  stickBaseEl.addEventListener('pointerup', stickEnd);
-  stickBaseEl.addEventListener('pointercancel', stickEnd);
-  stickBaseEl.addEventListener('lostpointercapture', stickEnd);
+  for (const el of [stickBaseEl, stickZoneEl]) {
+    el.addEventListener('pointerdown', e => stickStart(e, el === stickZoneEl));
+    el.addEventListener('pointermove', stickMove);
+    el.addEventListener('pointerup', stickEnd);
+    el.addEventListener('pointercancel', stickEnd);
+    el.addEventListener('lostpointercapture', stickEnd);
+  }
 
-  /* 动作按钮 */
-  bindTouchHold(touchMineEl,
-    () => { state.mouseDown[0] = true; state.breakTimer = 0; swingHand(); },
-    () => { state.mouseDown[0] = false; });
-  bindTouchHold(touchPlaceEl,
-    () => {
-      state.mouseDown[1] = true;
-      state.placeTimer = 0;
+  /* 动作按钮：短按放一块，长按拆除。和原版手机版一样。 */
+  const ACTION_HOLD_MS = 220;
+  function actionDown(e) {
+    if (!touchMode || state.mode !== 'playing' || actionPointer !== null) return;
+    e.preventDefault();
+    actionPointer = e.pointerId;
+    actionCancelled = false;
+    actionHeld = false;
+    touchPlaceEl.classList.add('active');
+    try { touchPlaceEl.setPointerCapture(e.pointerId); } catch (_) { /* ignore */ }
+    actionTimer = setTimeout(() => {
+      actionTimer = null;
+      if (actionCancelled || state.mode !== 'playing') return;
+      actionHeld = true;
+      state.mouseDown[0] = true;
+      state.breakTimer = 0;
+      swingHand();
+      try { if (navigator.vibrate) navigator.vibrate(12); } catch (_) { /* ignore */ }
+    }, ACTION_HOLD_MS);
+  }
+  function actionEnd(e, cancelled) {
+    if (e && e.pointerId !== actionPointer) return;
+    if (actionTimer) { clearTimeout(actionTimer); actionTimer = null; }
+    touchPlaceEl.classList.remove('active');
+    if (actionHeld) {
+      actionHeld = false;
+      state.mouseDown[0] = false;
+    } else if (!cancelled && !actionCancelled && state.mode === 'playing') {
       doPlace();
-      // 立即放一次；之后交给 handleHold 每 0.24 秒重复。
-      state.placeTimer = 0.24;
-      if (state.mode !== 'playing') state.mouseDown[1] = false;
-    },
-    () => { state.mouseDown[1] = false; });
+    }
+    actionPointer = null;
+    actionCancelled = false;
+  }
+  touchPlaceEl.addEventListener('pointerdown', actionDown);
+  touchPlaceEl.addEventListener('pointerup', e => actionEnd(e, false));
+  touchPlaceEl.addEventListener('pointercancel', e => actionEnd(e, true));
+  touchPlaceEl.addEventListener('lostpointercapture', e => actionEnd(e, true));
   bindTouchHold(touchJumpEl,
     () => { touchState.jump = true; },
     () => { touchState.jump = false; });
@@ -2151,7 +2244,7 @@
     if (!force && !dirtySave && state.time - lastTimeSave < 30) return;
     try {
       const data = world.saveData();
-      data.terrainVersion = 5;
+      data.terrainVersion = 6;
       data.inv = state.bag.map(s => (s ? (s.maxDur ? [s.id, s.count, s.dur, s.maxDur] : [s.id, s.count]) : 0));
       data.hotbar = state.hotbar.map(s => (s ? (s.maxDur ? [s.id, s.count, s.dur, s.maxDur] : [s.id, s.count]) : 0));
       data.time = state.time;
@@ -2209,9 +2302,17 @@
   let preGen = 0, preMesh = 0;
   const totalSteps = genList.length + meshList.length;
   let loaded = false;
+  let plannedCx = 1e9, plannedCz = 1e9, plannedR = -1;
+
+  function planRandomSites(pcx, pcz) {
+    if (pcx === plannedCx && pcz === plannedCz && plannedR === RENDER_R) return;
+    plannedCx = pcx; plannedCz = pcz; plannedR = RENDER_R;
+    world.planRandomAround(pcx, pcz, RENDER_R + 3);
+  }
 
   function preloadTick() {
     const t0 = performance.now();
+    planRandomSites(spawnCx, spawnCz);
     while (preGen < genList.length && performance.now() - t0 < 9) {
       const o = genList[preGen++];
       world.ensureChunk(spawnCx + o.dx, spawnCz + o.dz);
@@ -2281,10 +2382,11 @@
       player.update(dt, readInput());
       portalCooldown = Math.max(0, portalCooldown - dt);
       const footX = Math.floor(player.pos[0]), footY = Math.floor(player.pos[1]), footZ = Math.floor(player.pos[2]);
-      const insidePortal = world.getBlock(footX, footY, footZ) === MC.Block.PORTAL ||
-        world.getBlock(footX, footY + 1, footZ) === MC.Block.PORTAL;
+      // 走进门里就传送。门只有一格厚，走过去的瞬间也要能触发，所以判定的是
+      // 玩家身体和门面体积是否相交，而不是脚下那一格是不是传送门方块。
+      const insidePortal = insidePortalVolume();
       portalDwell = insidePortal && portalCooldown <= 0 ? portalDwell + dt : 0;
-      if (portalDwell > 0.7) travelPortal();
+      if (portalDwell > 0.22) travelPortal();
       if (world.isNether(player.pos[0], player.pos[2]) &&
           world.getBlock(footX, footY, footZ) === MC.Block.LAVA) {
         player.pos[0] = world.netherExit.x + 1.5;
@@ -2413,17 +2515,18 @@
 
   const debugMode = params.has('debug');
   secrets = new MC.Secrets({
-    world, player, state, sfx, particles, mobManager, debug: debugMode, scenicOnly: true,
+    world, player, state, sfx, particles, mobManager, debug: debugMode,
     hooks: {
       toast,
-      addItem: (id, count) => addToBag(id, count) === count,
+      read: openRead,
+      setBlock: (x, y, z, id) => {
+        if (world.setBlock(x, y, z, id)) rebuildNear(x, z);
+      },
       save: () => { dirtySave = true; saveWorld(true); },
       flash: () => {
         flashEl.classList.add('show');
         setTimeout(() => flashEl.classList.remove('show'), 760);
-      },
-      aurora: on => auroraEl.classList.toggle('show', !!on),
-      meteor: on => meteorsEl.classList.toggle('show', !!on)
+      }
     }
   });
 

@@ -12,8 +12,9 @@ button, select, summary { -webkit-tap-highlight-color: transparent; }
 button:focus-visible, summary:focus-visible, .slot:focus-visible { outline: 2px solid var(--field-gold); outline-offset: 3px; }
 #vignette { background: radial-gradient(ellipse at 50% 48%, transparent 60%, rgba(5, 18, 23, .25) 100%); }
 #crosshair { width: 15px; height: 15px; margin: -7.5px 0 0 -7.5px; }
-#crosshair::before { left: 7px; height: 15px; }
-#crosshair::after { top: 7px; width: 15px; }
+/* 用百分比定位：手机模式把准星放大到 21px 时也能保持正中。 */
+#crosshair::before { left: 50%; top: 0; width: 1px; height: 100%; margin: 0 0 0 -.5px; }
+#crosshair::after { top: 50%; left: 0; height: 1px; width: 100%; margin: -.5px 0 0 0; }
 
 /* 入口像一本摊开的旅行手记，右侧仍可看见实时风景。 */
 #overlay {
@@ -145,10 +146,12 @@ body.touch-mode .touchBtn.big { height: 60px; border-radius: 15px; font-size: 23
 body.touch-mode #touchMenu { grid-column: 1; grid-row: 1; }
 body.touch-mode #touchFly { grid-column: 2; grid-row: 1; }
 body.touch-mode #touchBag { grid-column: 3; grid-row: 1; }
-body.touch-mode #touchMine { grid-column: 1; grid-row: 2; }
-body.touch-mode #touchJump { grid-column: 2; grid-row: 2; }
-body.touch-mode #touchPlace { grid-column: 3; grid-row: 2; border-color: var(--field-gold); background: rgba(147, 99, 45, .77); }
-body.touch-mode #touchDown, body.touch-mode.flying #touchDown { position: absolute; right: 0; top: -53px; width: 52px; height: 44px; }
+body.touch-mode #touchJump { grid-column: 1; grid-row: 2; }
+body.touch-mode #touchPlace { grid-column: 2 / span 2; grid-row: 2; width: auto; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; border-color: var(--field-gold); background: rgba(147, 99, 45, .77); }
+body.touch-mode #touchPlace .actionIcon { font-size: 23px; line-height: 1; }
+body.touch-mode #touchPlace .actionLabel { font-size: 8px; font-weight: 600; letter-spacing: .02em; line-height: 1; opacity: .82; }
+body.touch-mode #touchDown { display: none; position: absolute; right: 0; top: -53px; width: 52px; height: 44px; }
+body.touch-mode.flying #touchDown { display: block; }
 body.touch-mode #touchDown.hide { display: none; }
 body.touch-mode #hotbar { bottom: calc(8px + env(safe-area-inset-bottom, 0px)); gap: 2px; padding: 4px; max-width: calc(100vw - 16px); }
 body.touch-mode #hotbar .slot { width: clamp(31px, 8.6vw, 39px); height: clamp(31px, 8.6vw, 39px); border-radius: 8px; }

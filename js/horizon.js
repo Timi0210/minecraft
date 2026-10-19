@@ -15,6 +15,7 @@
       this.nextRow = SIDE;
       this.phase = 'idle';
       this.heights = new Float32Array(SIDE * SIDE);
+      this.smoothHeights = new Float32Array(SIDE * SIDE);
       this.tiles = new Uint8Array(SIDE * SIDE);
       // 固定大小缓冲反复使用，避免一次性创建数十万个临时数组。
       this.vertices = new Float32Array(SIDE * SIDE * 10);
@@ -57,10 +58,11 @@
       }
       do {
         if (this.phase === 'sample') this.sampleRow(this.nextRow);
+        else if (this.phase === 'smooth') this.smoothRow(this.nextRow);
         else this.buildRow(this.nextRow);
         if (++this.nextRow === SIDE) {
-          this.phase = this.phase === 'sample' ? 'mesh' : 'upload';
-          this.nextRow = this.phase === 'mesh' ? 0 : SIDE;
+          this.phase = this.phase === 'sample' ? 'smooth' : this.phase === 'smooth' ? 'mesh' : 'upload';
+          this.nextRow = this.phase === 'upload' ? SIDE : 0;
           return;
         }
       } while (performance.now() < deadline);
@@ -83,15 +85,31 @@
       }
     }
 
+    /* 先对采样高度做一次 3×3 平滑，位置和法线都从平滑后的高度算。 */
+    smoothRow(row) {
+      const h = this.heights, out = this.smoothHeights;
+      for (let col = 0; col < SIDE; col++) {
+        let sum = 0, count = 0;
+        for (let oz = -1; oz <= 1; oz++) {
+          const rz = Math.max(0, Math.min(CELLS, row + oz));
+          for (let ox = -1; ox <= 1; ox++) {
+            const rx = Math.max(0, Math.min(CELLS, col + ox));
+            sum += h[rz * SIDE + rx]; count++;
+          }
+        }
+        out[row * SIDE + col] = sum / count;
+      }
+    }
+
     buildRow(row) {
-      const h = this.heights, v = this.vertices, B = MC.Block;
+      const sh = this.smoothHeights, v = this.vertices, B = MC.Block;
       for (let col = 0; col < SIDE; col++) {
         const i = row * SIDE + col, b = this.tiles[i], uv = this.tileUV[b];
-        const nx = h[row * SIDE + Math.max(0, col - 1)] - h[row * SIDE + Math.min(CELLS, col + 1)];
-        const nz = h[Math.max(0, row - 1) * SIDE + col] - h[Math.min(CELLS, row + 1) * SIDE + col];
+        const nx = sh[row * SIDE + Math.max(0, col - 1)] - sh[row * SIDE + Math.min(CELLS, col + 1)];
+        const nz = sh[Math.max(0, row - 1) * SIDE + col] - sh[Math.min(CELLS, row + 1) * SIDE + col];
         const len = Math.hypot(nx, STEP * 2, nz);
         let n = i * 10;
-        v[n++] = this.originX + col * STEP; v[n++] = h[i]; v[n++] = this.originZ + row * STEP;
+        v[n++] = this.originX + col * STEP; v[n++] = sh[i]; v[n++] = this.originZ + row * STEP;
         v[n++] = uv[0]; v[n++] = uv[1]; v[n++] = 0.94;
         v[n++] = nx / len; v[n++] = STEP * 2 / len; v[n++] = nz / len;
         v[n] = b === B.WATER ? -1 : b === B.SAND ? -2 : b === B.TERRACOTTA ? -3 : b === B.SNOW ? -4 : 0;

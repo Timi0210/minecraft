@@ -40,25 +40,15 @@
     crimson: '绯红森林', warped: '诡异森林', basalt: '玄武岩三角洲', souls: '灵魂沙峡谷'
   };
 
-  /* 九座石碑的残页。它们不组成任务，只是同一段往事的不同切口。 */
-  const TABLET_BIOMES = ['plains', 'forest', 'desert', 'cherry', 'mountain', 'badlands', 'snow', 'taiga', 'beach'];
-  const TABLET_TEXTS = {
-    plains: ['一 · 无名之地', '很久以前，这里没有名字。\n\n人们把第一块石头立起来，叫它远野。\n\n后来石头被草盖住了，名字却留了下来。'],
-    forest: ['二 · 树先到', '树比人先到这里。\n\n伐木的人说，每棵树倒下时，森林都会往后退一步。\n\n所以他们只砍够用的，把剩下的路留给树。'],
-    desert: ['三 · 沙下的河', '沙下有河。\n\n有人把水存在陶罐里，再把陶罐埋回沙里，留给下一个路过的人。\n\n没有人知道第一个人是谁。'],
-    cherry: ['四 · 安静的一天', '樱花开的时候，村子会安静一天。\n\n没有人规定，但大家都记得。\n\n连风都放轻了脚步。'],
-    mountain: ['五 · 山不阻止', '山不欢迎人。\n\n它只是不阻止人。\n\n登上去的人说，山顶的风会把名字吹走，所以下山后要重新介绍自己。'],
-    badlands: ['六 · 烧过的土', '彩色的土层里夹着一层灰。\n\n老人说，那是远野烧过一场很大的火。\n\n火之后，土变成了现在这样，一层一层，像书页。'],
-    snow: ['七 · 雪线', '雪线之上没有路。\n\n只有风记得谁上去过。\n\n它不告诉任何人。'],
-    taiga: ['八 · 替山挡风', '云杉排成队，替山挡风。\n\n最外圈的那排树总是弯的。\n\n里面那排，长得很直。'],
-    beach: ['九 · 海的另一边', '海的另一边也有人。\n\n他们也在石头上写字。\n\n潮水把两边的话都磨掉了一半，剩下的刚好能读懂。']
-  };
-
   // 每个站点会占用的最大水平半径，用于区块生成时的快速裁剪。
   const SITE_RADIUS = {
-    origin: 6, sword: 5, cairn: 4, cabin: 17, lab: 8, ship: 8, bench: 4,
-    sky: 10, tablet: 3, giant: 12, lighthouse: 7, arch: 7
+    giant: 12, lighthouse: 7, arch: 7, spawn: 7,
+    easel: 9, well: 8, shoes: 6, key: 6
   };
+  // 散落的小建筑：每个 176×176 的格子按种子决定有没有、是什么。
+  const RANDOM_CELL = 176;
+  const RANDOM_SITE_R = 11;
+  const RANDOM_TYPES = ['hut', 'tower', 'camp', 'garden', 'well', 'ruin'];
 
 
   class Chunk {
@@ -84,16 +74,30 @@
       this.lightSources = new Map(); // 已加载火把；光照不写入存档
       this.edits = new Map();       // "x,y,z" -> [x,y,z,id]
       this.editIndex = new Map();   // "cx,cz" -> Map<区块内索引, id>
-      // 四条相连的山脊环抱冰川谷。种子只轻微偏移整组山，不会把谷地撕开。
-      const offsetX = Math.round((N.hash2(1, 0, this.seed + 19001) - 0.5) * 34);
-      const offsetZ = Math.round((N.hash2(2, 0, this.seed + 19001) - 0.5) * 34);
-      this.peaks = [
+      this.biomeCache = new Map();  // 每个 3×3 区域组的随机地貌排列
+      this.randSites = new Map();   // 随机小建筑选址缓存
+      // 四条相连的山脊环抱冰川谷。每个种子都会挪动山体、峰高和谷宽，
+      // 不再让所有世界长成同一张地图。
+      const offsetX = Math.round((N.hash2(1, 0, this.seed + 19001) - 0.5) * 96);
+      const offsetZ = Math.round((N.hash2(2, 0, this.seed + 19001) - 0.5) * 96);
+      const basePeaks = [
         [310 + offsetX, 370 + offsetZ, 215, 195, 94],
         [105 + offsetX, 300 + offsetZ, 185, 205, 67],
         [470 + offsetX, 305 + offsetZ, 185, 190, 68],
         [520 + offsetX, 165 + offsetZ, 150, 170, 49]
       ];
-      this.glacier = { x: 280 + offsetX, z: 245 + offsetZ, rx: 150, rz: 145 };
+      this.peaks = basePeaks.map((p, i) => [
+        p[0] + Math.round((N.hash2(i + 11, 3, this.seed + 19103) - 0.5) * 58),
+        p[1] + Math.round((N.hash2(i + 17, 5, this.seed + 19109) - 0.5) * 58),
+        Math.max(120, p[2] + Math.round((N.hash2(i + 23, 7, this.seed + 19117) - 0.5) * 44)),
+        Math.max(110, p[3] + Math.round((N.hash2(i + 29, 9, this.seed + 19121) - 0.5) * 44)),
+        Math.max(34, Math.min(108, p[4] + Math.round((N.hash2(i + 31, 11, this.seed + 19129) - 0.5) * 22)))
+      ]);
+      this.glacier = {
+        x: 280 + offsetX, z: 245 + offsetZ,
+        rx: 132 + Math.round(N.hash2(41, 13, this.seed + 19137) * 44),
+        rz: 128 + Math.round(N.hash2(43, 17, this.seed + 19141) * 40)
+      };
       const v = this.glacier;
       // 岩石前哨仍作为雪谷中的唯一建筑，位置落在谷内较高的山肩。
       const outpostX = v.x + 26;
@@ -118,12 +122,12 @@
       if (savedEdits && savedEdits.length) {
         for (let i = 0; i < savedEdits.length; i++) {
           const e = savedEdits[i];
-          if (e && e.length === 4) this.recordEdit(e[0], e[1], e[2], e[3]);
+          // 旧版本留下的「丢失的贴图」不再进入世界。
+          if (e && e.length === 4 && e[3] !== B.GLITCH) this.recordEdit(e[0], e[1], e[2], e[3]);
         }
       }
       this.spawn = this.findSpawn();
       // 开放世界的内容：远景地标、散落的人造痕迹与不进入任何列表的彩蛋。
-      this.lore = new Map();
       this.sites = [];
       this.planOpenWorld();
     }
@@ -328,8 +332,27 @@
 
     /* ---------------- 地形 ---------------- */
 
+    /* 每 3×3 个区域随机打乱一次地貌排列：每个大区域仍然九种地貌都有，
+       但排列跟着种子变，走远之后不会又回到同一张固定拼图。 */
+    superBiomes(sx, sz) {
+      const key = sx + ',' + sz;
+      const hit = this.biomeCache.get(key);
+      if (hit) return hit;
+      const rng = N.mulberry32(Math.floor(N.hash2(sx, sz, this.seed + 24091) * 4294967296) | 0);
+      const list = REGION_BIOMES.slice();
+      for (let i = list.length - 1; i > 0; i--) {
+        const j = (rng() * (i + 1)) | 0;
+        const t = list[i]; list[i] = list[j]; list[j] = t;
+      }
+      if (this.biomeCache.size > 2048) this.biomeCache.clear();
+      this.biomeCache.set(key, list);
+      return list;
+    }
+
     regionBiome(ix, iz) {
-      return REGION_BIOMES[(((iz % 3) + 3) % 3) * 3 + (((ix % 3) + 3) % 3)];
+      const list = this.superBiomes(Math.floor(ix / 3), Math.floor(iz / 3));
+      const lx = ((ix % 3) + 3) % 3, lz = ((iz % 3) + 3) % 3;
+      return list[lz * 3 + lx];
     }
 
     biomeField(x, z) {
@@ -358,6 +381,8 @@
       const edgeZ = (N.noise2(x * 0.034, z * 0.034, s + 7703) - 0.5) * 0.24;
       let biome = this.regionBiome(ix + (gx - ix > 0.5 + edgeX ? 1 : 0),
         iz + (gz - iz > 0.5 + edgeZ ? 1 : 0));
+      // 冰川谷始终是雪原，不会被随机地貌换成森林或沙漠。
+      if (this.glacier && this.glacierWeight(x, z) > 0.18) biome = 'snow';
       return { biome, height, mountain, badlands, dry, snow };
     }
 
@@ -544,9 +569,9 @@
           const biome = h <= SEA_ ? (field.biome === 'snow' ? 'frozen_ocean' : 'ocean') :
             h <= SEA_ + 2 ? 'beach' : h > 64 ? 'mountain' : field.biome;
           const cherry = biome === 'cherry';
-          const cold = field.biome === 'snow';
-          const peakStrength = this.peakRise(wx, wz);
           const glacier = this.glacierWeight(wx, wz);
+          const cold = field.biome === 'snow' || glacier > 0.18;
+          const peakStrength = this.peakRise(wx, wz);
           const protectedAlpine = glacier > 0.12 || peakStrength > 9;
           const redlands = !protectedAlpine && field.badlands >
             0.40 + N.noise2(wx * 0.052, wz * 0.052, this.seed + 3703) * 0.30;
@@ -555,7 +580,7 @@
           const alpine = field.mountain > 0.18 || peakStrength > 9 || glacier > 0.12;
           const snowline = 73 - glacier * 23 - field.mountain * 7 +
             (N.noise2(wx * 0.028, wz * 0.028, this.seed + 3503) - 0.5) * 10;
-          const snowy = !redlands && ((alpine && h >= snowline) || field.snow >
+          const snowy = !redlands && (glacier > 0.18 || (alpine && h >= snowline) || field.snow >
             0.28 + N.noise2(wx * 0.052, wz * 0.052, this.seed + 4103) * 0.45);
           const rockNoise = N.noise2(wx * 0.024, wz * 0.024, this.seed + 28013) * 0.34 +
             (N.noise2(wx * 0.083, wz * 0.083, this.seed + 28031) - 0.5) * 0.10;
@@ -597,6 +622,8 @@
       this.placePetals(chunk);
       this.placeAlpineOutpost(chunk);
       this.placeOpenWorld(chunk);
+      this.placeRandomStructures(chunk);
+      this.removeStrayDebris(chunk);
       this.applyEdits(chunk);
       chunk.generated = true;
     }
@@ -643,8 +670,34 @@
         }
       }
       this.placePortal(chunk, this.netherExit.x, this.netherExit.y, this.netherExit.z, true);
+      this.removeStrayDebris(chunk);
       this.applyEdits(chunk);
       chunk.generated = true;
+    }
+
+    /* 清掉天然生成里孤零零悬在空中的方块，以及旧版的丢失贴图。 */
+    removeStrayDebris(chunk) {
+      const blocks = chunk.blocks;
+      const STEP = CHUNK * CHUNK;
+      const treeIds = new Set([
+        B.LOG, B.LEAVES, B.SPRUCE_LOG, B.SPRUCE_LEAVES,
+        B.BIRCH_LOG, B.BIRCH_LEAVES, B.CHERRY_LOG, B.CHERRY_LEAVES
+      ]);
+      for (let y = 2; y < HEIGHT - 1; y++) {
+        for (let z = 1; z < CHUNK - 1; z++) {
+          for (let x = 1; x < CHUNK - 1; x++) {
+            const i = (y * CHUNK + z) * CHUNK + x;
+            const id = blocks[i];
+            if (id === B.GLITCH) { blocks[i] = 0; continue; }
+            if (!id || !MC.Block.isSolid(id) || id === B.BEDROCK || treeIds.has(id)) continue;
+            if (blocks[i - STEP] !== 0 || blocks[i + STEP] !== 0 ||
+                blocks[i - 1] !== 0 || blocks[i + 1] !== 0 ||
+                blocks[i - CHUNK] !== 0 || blocks[i + CHUNK] !== 0) continue;
+            // 六个方向全空：只会是地形/结构留下的孤立方块。
+            blocks[i] = 0;
+          }
+        }
+      }
     }
 
     placePortal(chunk, x0, floor, z0, platform) {
@@ -854,6 +907,7 @@
           if (tp > 0.032 && cr > 0.006) continue;
           const h = this.heightAt(wx, wz);
           if (h <= SEA + 2 || h > 63) continue;
+          if (this.glacierWeight(wx, wz) > 0.22) continue;
           const biome = this.biomeAt(wx, wz, h);
           if (biome === 'desert' || biome === 'badlands') {
             if (cr < 0.006) {
@@ -1023,12 +1077,23 @@
       return site;
     }
 
-    setLore(x, y, z, title, text) {
-      this.lore.set(x + ',' + y + ',' + z, { title, text });
-    }
-
-    loreAt(x, y, z) {
-      return this.lore.get(x + ',' + y + ',' + z) || null;
+    // 海岸通常是一条窄带，用更密的环扫描，免得漏掉。
+    findShoreSite(ox, oz, minR, maxR) {
+      for (let r = minR; r <= maxR; r += 10) {
+        const steps = Math.max(24, Math.round(r / 6));
+        for (let i = 0; i < steps; i++) {
+          const a = (i / steps) * Math.PI * 2 +
+            (N.hash2(r, i, this.seed + 13007) - 0.5) * 0.4;
+          const x = Math.round(ox + Math.cos(a) * r);
+          const z = Math.round(oz + Math.sin(a) * r);
+          const h = this.heightAt(x, z);
+          if (h < SEA + 1 || h > SEA + 2) continue;
+          if (!this.flat(x, z, 2)) continue;
+          if (!this.freeSite(x, z, 36)) continue;
+          return { x, z, y: h };
+        }
+      }
+      return null;
     }
 
     findSite(ox, oz, minR, maxR, filter) {
@@ -1040,7 +1105,8 @@
           const x = Math.round(ox + Math.cos(a) * r);
           const z = Math.round(oz + Math.sin(a) * r);
           const h = this.heightAt(x, z);
-          if (h <= SEA + 2 || h > MAX_TERRAIN - 14) continue;
+          // 沙滩只比海面高一两格，这里不能按内陆的高度门槛筛掉。
+          if (h <= SEA || h > MAX_TERRAIN - 14) continue;
           const biome = this.biomeAt(x, z, h);
           if (!filter(x, z, h, biome)) continue;
           return { x, z, y: h, biome };
@@ -1049,142 +1115,55 @@
       return null;
     }
 
-    findWaterSite(ox, oz, minR, maxR) {
-      for (let r = minR; r <= maxR; r += 20) {
-        const steps = Math.max(16, Math.round(r / 10));
-        for (let i = 0; i < steps; i++) {
-          const a = (i / steps) * Math.PI * 2 +
-            (N.hash2(r, i + 7, this.seed + 12043) - 0.5) * 0.8;
-          const x = Math.round(ox + Math.cos(a) * r);
-          const z = Math.round(oz + Math.sin(a) * r);
-          const h = this.heightAt(x, z);
-          if (SEA - h < 6) continue;
-          if (!this.freeSite(x, z, 80)) continue;
-          if (this.biomeAt(x, z, h) === 'frozen_ocean') continue;
-          let shore = false;
-          for (let k = 0; k < 8 && !shore; k++) {
-            const ang = k * Math.PI / 4;
-            shore = this.heightAt(x + Math.round(Math.cos(ang) * 34),
-              z + Math.round(Math.sin(ang) * 34)) > SEA + 1;
-          }
-          if (!shore) continue;
-          return { x, z, y: h, biome: 'ocean' };
-        }
-      }
-      return null;
-    }
-
-    findHighSite(ox, oz, minR, maxR) {
-      let best = null;
-      for (let r = minR; r <= maxR; r += 12) {
-        const steps = Math.max(10, Math.round(r / 14));
-        for (let i = 0; i < steps; i++) {
-          const a = (i / steps) * Math.PI * 2 +
-            (N.hash2(r, i + 3, this.seed + 17707) - 0.5) * 0.7;
-          const x = Math.round(ox + Math.cos(a) * r);
-          const z = Math.round(oz + Math.sin(a) * r);
-          const h = this.heightAt(x, z);
-          if (h <= SEA + 3 || h > MAX_TERRAIN - 18) continue;
-          if (!this.flat(x, z, 2)) continue;
-          if (!this.freeSite(x, z, 46)) continue;
-          if (!best || h > best.h) best = { x, z, h };
-        }
-      }
-      return best;
-    }
-
     planOpenWorld() {
       const spawn = this.spawn;
 
-      // 原点：无论那里是陆地还是海面，都立一块石头。
-      this.addSite({ type: 'origin', x: 0, z: 0,
-        y: Math.max(this.maxHeight(0, 0, 4) + 1, SEA + 2) });
+      // 出生点周围清一小块空地，避免一睁眼就站在树干或树冠里。
+      this.addSite({ type: 'spawn', x: Math.round(spawn.x), z: Math.round(spawn.z), y: 0 });
 
-      // 新群峰的两处峰顶仍留有石中剑与旧石堆。
-      const p0 = this.peaks[0], p1 = this.peaks[1];
-      this.addSite({ type: 'sword', x: Math.round(p0[0]), z: Math.round(p0[1]),
-        y: this.heightAt(Math.round(p0[0]), Math.round(p0[1])) + 1 });
-      this.addSite({ type: 'cairn', x: Math.round(p1[0]), z: Math.round(p1[1]),
-        y: this.heightAt(Math.round(p1[0]), Math.round(p1[1])) + 1 });
-
-      // 开发者小屋：离出生点够远，只有不沿路走的人才会遇到。
-      const cabin = this.findSite(spawn.x, spawn.z, 620, 820, (x, z, h, biome) =>
-        (biome === 'forest' || biome === 'plains' || biome === 'taiga' || biome === 'snow') &&
-        this.flat(x, z, 4) && this.freeSite(x, z, 120));
-      if (cabin) this.addSite({ type: 'cabin', x: cabin.x, z: cabin.z,
-        y: this.maxHeight(cabin.x, cabin.z, 5) + 1 });
-
-      // 埋在林地边缘的混凝土小屋：一块不该存在的贴图。
-      const lab = this.findSite(spawn.x, spawn.z, 150, 320, (x, z, h, biome) =>
-        (biome === 'forest' || biome === 'taiga' || biome === 'plains') &&
-        this.flat(x, z, 3) && this.freeSite(x, z, 70));
-      if (lab) this.addSite({ type: 'lab', x: lab.x, z: lab.z,
-        y: this.maxHeight(lab.x, lab.z, 3) + 1 });
-
-      // 沉船：找一个离岸不远、够深的水域。
-      const ship = this.findWaterSite(spawn.x, spawn.z, 80, 460);
-      if (ship) this.addSite({ type: 'ship', x: ship.x, z: ship.z, y: ship.y + 1 });
-
-      // 长椅：出生点附近最高的、能坐下来的地方。
-      const bench = this.findHighSite(spawn.x, spawn.z, 60, 170);
-      if (bench) this.addSite({ type: 'bench', x: bench.x, z: bench.z,
-        y: bench.h + 1 });
-
-      // 云上小岛：不指路，飞上去才看得见。
-      const skyAngle = N.hash2(31, 7, this.seed + 5501) * Math.PI * 2;
-      const skyDist = 210 + N.hash2(5, 9, this.seed + 6607) * 80;
-      this.addSite({ type: 'sky',
-        x: Math.round(spawn.x + Math.cos(skyAngle) * skyDist),
-        z: Math.round(spawn.z + Math.sin(skyAngle) * skyDist), y: 138 });
-
-      this.planTablets(spawn);
+      this.planSecrets(spawn);
       this.planLandmarks(spawn);
     }
 
-    planTablets(spawn) {
-      const buckets = {};
-      for (let dz = -660; dz <= 660; dz += 32) {
-        for (let dx = -660; dx <= 660; dx += 32) {
-          const x = Math.round(spawn.x + dx), z = Math.round(spawn.z + dz);
-          const d = Math.hypot(dx, dz);
-          if (d < 90 || d > 620) continue;
-          const h = this.heightAt(x, z);
-          const biome = this.biomeAt(x, z, h);
-          if (!TABLET_TEXTS[biome]) continue;
-          if (biome === 'beach') {
-            if (h < SEA + 1 || h > SEA + 2) continue;
-          } else if (h <= SEA + 2 || h > MAX_TERRAIN - 16) continue;
-          if (!this.flat(x, z, 2)) continue;
-          if (!this.freeSite(x, z, 52)) continue;
-          const list = buckets[biome] || (buckets[biome] = []);
-          list.push({ x, z, y: h, d });
-        }
-      }
-      for (let i = 0; i < TABLET_BIOMES.length; i++) {
-        const biome = TABLET_BIOMES[i];
-        const list = buckets[biome];
-        if (!list || !list.length) continue;
-        list.sort((a, b) => a.d - b.d);
-        let pick = null;
-        for (let k = 0; k < Math.min(list.length, 12); k++) {
-          const at = list[Math.min(list.length - 1,
-            (k + Math.floor(N.hash2(i, k, this.seed + 4409) * 4)) % list.length)];
-          if (this.freeSite(at.x, at.z, 64)) { pick = at; break; }
-        }
-        if (!pick) continue;
-        this.addSite({ type: 'tablet', biome, index: i, x: pick.x, z: pick.z,
-          y: this.maxHeight(pick.x, pick.z, 1) + 1 });
-      }
+    /* 六个彩蛋里的四个有实体：选址只保证「走得到」，不指路。 */
+    planSecrets(spawn) {
+      // 画架：能看见远山的高处，不贴海。
+      const easel = this.findSite(spawn.x, spawn.z, 120, 340, (x, z, h, biome) =>
+        biome !== 'ocean' && biome !== 'frozen_ocean' && biome !== 'beach' &&
+        h > SEA + 8 && this.flat(x, z, 4) && this.freeSite(x, z, 80));
+      if (easel) this.addSite({ type: 'easel', x: easel.x, z: easel.z,
+        y: this.maxHeight(easel.x, easel.z, 3) + 1 });
+
+      // 井：林地、平原或樱花林边缘的一口旧井。
+      const well = this.findSite(spawn.x, spawn.z, 80, 240, (x, z, h, biome) =>
+        (biome === 'plains' || biome === 'forest' || biome === 'taiga' || biome === 'cherry') &&
+        h > SEA + 3 && this.flat(x, z, 2) && this.freeSite(x, z, 56));
+      if (well) this.addSite({ type: 'well', x: well.x, z: well.z,
+        y: this.maxHeight(well.x, well.z, 2) + 1 });
+
+      // 鞋：海边，潮水够得着的地方。
+      const shoes = this.findShoreSite(spawn.x, spawn.z, 60, 360);
+      if (shoes) this.addSite({ type: 'shoes', x: shoes.x, z: shoes.z,
+        y: this.maxHeight(shoes.x, shoes.z, 1) + 1 });
+
+      // 石堆：更远、更高的地方。找到它的人通常已经走了很久。
+      const key = this.findSite(spawn.x, spawn.z, 200, 520, (x, z, h, biome) =>
+        (biome === 'mountain' || biome === 'snow' || biome === 'taiga' || biome === 'plains') &&
+        h > SEA + 12 && this.flat(x, z, 3) && this.freeSite(x, z, 90));
+      if (key) this.addSite({ type: 'key', x: key.x, z: key.z,
+        y: this.maxHeight(key.x, key.z, 2) + 1 });
     }
 
     planLandmarks(spawn) {
+      // 地貌排列每个种子都不同，所以地标要找更远一些；地形合适比群系名字重要。
       const defs = [
-        { type: 'giant', min: 100, max: 340, radius: 8,
-          ok: (x, z, h, b) => (b === 'forest' || b === 'plains') && this.flat(x, z, 5) },
-        { type: 'lighthouse', min: 130, max: 430, radius: 6,
+        { type: 'giant', min: 100, max: 560, radius: 8,
+          ok: (x, z, h, b) => b !== 'ocean' && b !== 'frozen_ocean' && b !== 'beach' &&
+            this.flat(x, z, 5) },
+        { type: 'lighthouse', min: 130, max: 560, radius: 6,
           ok: (x, z, h, b) => this.nearWater(x, z, 14) && this.flat(x, z, 3) },
-        { type: 'arch', min: 150, max: 420, radius: 11,
-          ok: (x, z, h, b) => (b === 'plains' || b === 'desert' || b === 'badlands') &&
+        { type: 'arch', min: 150, max: 560, radius: 11,
+          ok: (x, z, h, b) => b !== 'ocean' && b !== 'frozen_ocean' && b !== 'beach' &&
             this.flat(x, z, 5) }
       ];
       for (const d of defs) {
@@ -1231,218 +1210,310 @@
         if (bx > s.x + r || bx + CHUNK - 1 < s.x - r ||
             bz > s.z + r || bz + CHUNK - 1 < s.z - r) continue;
         switch (s.type) {
-          case 'origin': this.buildOrigin(chunk, s); break;
-          case 'sword': this.buildSword(chunk, s); break;
-          case 'cairn': this.buildCairn(chunk, s); break;
-          case 'cabin': this.buildCabin(chunk, s); break;
-          case 'lab': this.buildLab(chunk, s); break;
-          case 'ship': this.buildShip(chunk, s); break;
-          case 'bench': this.buildBench(chunk, s); break;
-          case 'sky': this.buildSky(chunk, s); break;
-          case 'tablet': this.buildTablet(chunk, s); break;
+          case 'easel': this.buildEasel(chunk, s); break;
+          case 'well': this.buildWell(chunk, s); break;
+          case 'shoes': this.buildShoes(chunk, s); break;
+          case 'key': this.buildKey(chunk, s); break;
           case 'giant': this.buildGiant(chunk, s); break;
           case 'lighthouse': this.buildLighthouse(chunk, s); break;
           case 'arch': this.buildArch(chunk, s); break;
+          case 'spawn': this.buildSpawn(chunk, s); break;
         }
       }
     }
 
-    buildOrigin(chunk, s) {
-      const { x, z } = s, y = s.y;
-      this.clearBox(chunk, x - 5, y + 1, z - 5, x + 5, y + 5, z + 5);
-      for (let dz = -4; dz <= 4; dz++) for (let dx = -4; dx <= 4; dx++) {
-        if (dx * dx + dz * dz > 20) continue;
-        this.fillBelow(chunk, x + dx, y, z + dz);
-        this.put(chunk, x + dx, y, z + dz, B.COBBLE);
+    /* ---------------- 随机散落的小建筑 ---------------- */
+
+    randomSiteFor(gx, gz) {
+      const key = gx + ',' + gz;
+      if (this.randSites.has(key)) return this.randSites.get(key);
+      let site = null;
+      const rng = N.mulberry32(Math.floor(N.hash2(gx, gz, this.seed + 73117) * 4294967296) | 0);
+      if (rng() < 0.72) {
+        // 抖动限制在格子中部，相邻格子的小屋就不会挤在一起。
+        const x = Math.round(gx * RANDOM_CELL + RANDOM_CELL * 0.5 + (rng() - 0.5) * 36);
+        const z = Math.round(gz * RANDOM_CELL + RANDOM_CELL * 0.5 + (rng() - 0.5) * 36);
+        const h = this.heightAt(x, z);
+        const biome = this.biomeAt(x, z, h);
+        const land = !this.isNether(x, z) && h > SEA + 3 && h < MAX_TERRAIN - 12 &&
+          biome !== 'ocean' && biome !== 'frozen_ocean' && biome !== 'beach';
+        const awayFromOutpost = Math.hypot(x - this.outpost.x, z - this.outpost.z) > 52;
+        if (land && awayFromOutpost && Math.hypot(x - this.spawn.x, z - this.spawn.z) > 64 &&
+            this.flat(x, z, 4) && this.freeSite(x, z, 58)) {
+          site = { type: RANDOM_TYPES[(rng() * RANDOM_TYPES.length) | 0], x, z,
+            y: this.maxHeight(x, z, 4) + 1, rot: (rng() * 4) | 0 };
+        }
       }
-      this.put(chunk, x, y + 1, z, B.TABLET);
-      this.setLore(x, y + 1, z, '原点的石头',
-        '石头上没有落款。\n\n你试着读那些刻痕：\n“从这里算起，往哪走都算远方。”\n\n风把字磨得很浅，像有人只想写给停下脚步的人看。');
-      for (const [dx, dz] of [[-3, -3], [3, -3], [-3, 3], [3, 3]]) {
-        for (let dy = 1; dy <= 2; dy++) this.put(chunk, x + dx, y + dy, z + dz, B.COBBLE);
-        this.put(chunk, x + dx, y + 3, z + dz, B.TORCH);
+      this.randSites.set(key, site);
+      return site;
+    }
+
+    /* 在区块生成之前先把附近格子的小建筑选址算好，
+       否则先被生成的那个区块会把稍后才抽到的小屋错过。 */
+    planRandomAround(pcx, pcz, radius) {
+      const bx0 = (pcx - radius) * CHUNK, bx1 = (pcx + radius + 1) * CHUNK - 1;
+      const bz0 = (pcz - radius) * CHUNK, bz1 = (pcz + radius + 1) * CHUNK - 1;
+      const g0x = Math.floor((bx0 - RANDOM_SITE_R) / RANDOM_CELL);
+      const g1x = Math.floor((bx1 + RANDOM_SITE_R) / RANDOM_CELL);
+      const g0z = Math.floor((bz0 - RANDOM_SITE_R) / RANDOM_CELL);
+      const g1z = Math.floor((bz1 + RANDOM_SITE_R) / RANDOM_CELL);
+      for (let gz = g0z; gz <= g1z; gz++)
+        for (let gx = g0x; gx <= g1x; gx++) this.randomSiteFor(gx, gz);
+    }
+
+    placeRandomStructures(chunk) {
+      const bx = chunk.cx * CHUNK, bz = chunk.cz * CHUNK;
+      const g0x = Math.floor((bx - RANDOM_SITE_R) / RANDOM_CELL);
+      const g1x = Math.floor((bx + CHUNK - 1 + RANDOM_SITE_R) / RANDOM_CELL);
+      const g0z = Math.floor((bz - RANDOM_SITE_R) / RANDOM_CELL);
+      const g1z = Math.floor((bz + CHUNK - 1 + RANDOM_SITE_R) / RANDOM_CELL);
+      for (let gz = g0z; gz <= g1z; gz++) {
+        for (let gx = g0x; gx <= g1x; gx++) {
+          const site = this.randomSiteFor(gx, gz);
+          if (!site) continue;
+          if (bx > site.x + RANDOM_SITE_R || bx + CHUNK - 1 < site.x - RANDOM_SITE_R ||
+              bz > site.z + RANDOM_SITE_R || bz + CHUNK - 1 < site.z - RANDOM_SITE_R) continue;
+          this.buildRandomSite(chunk, site);
+        }
       }
     }
 
-    buildSword(chunk, s) {
+    buildRandomSite(chunk, site) {
+      switch (site.type) {
+        case 'hut': this.buildRandomHut(chunk, site); break;
+        case 'tower': this.buildRandomTower(chunk, site); break;
+        case 'camp': this.buildRandomCamp(chunk, site); break;
+        case 'garden': this.buildRandomGarden(chunk, site); break;
+        case 'well': this.buildRandomWell(chunk, site); break;
+        case 'ruin': this.buildRandomRuin(chunk, site); break;
+      }
+    }
+
+    buildRandomHut(chunk, s) {
       const { x, z } = s, y = s.y;
-      this.clearBox(chunk, x - 4, y, z - 4, x + 4, y + 6, z + 4);
+      this.clearTrees(chunk, x - 7, z - 7, x + 7, z + 7);
+      this.clearBox(chunk, x - 6, y, z - 6, x + 6, y + 9, z + 6);
       for (let dz = -3; dz <= 3; dz++) for (let dx = -3; dx <= 3; dx++) {
-        if (dx * dx + dz * dz > 10) continue;
-        this.fillBelow(chunk, x + dx, y, z + dz);
-        this.put(chunk, x + dx, y, z + dz, dx * dx + dz * dz > 6 ? B.STONE : B.COBBLE);
-      }
-      this.put(chunk, x, y + 1, z, B.STONE_SWORD);
-      this.setLore(x, y + 1, z, '石中剑',
-        '一把剑斜插在岩石里，像长在那里。\n\n你握住剑柄，用力——\n\n（这里只有风。）\n\n剑纹丝不动。也许它认人，也许它只是喜欢这样。');
-      for (const [dx, dz] of [[-2, 2], [2, -2]]) this.put(chunk, x + dx, y + 1, z + dz, B.TORCH);
-    }
-
-    buildCairn(chunk, s) {
-      const { x, z } = s, y = s.y;
-      this.clearBox(chunk, x - 2, y, z - 2, x + 2, y + 5, z + 2);
-      for (let dz = -1; dz <= 1; dz++) for (let dx = -1; dx <= 1; dx++) {
-        this.fillBelow(chunk, x + dx, y, z + dz);
-        this.put(chunk, x + dx, y, z + dz, B.COBBLE);
-      }
-      this.put(chunk, x, y + 1, z, B.TABLET);
-      this.put(chunk, x + 1, y + 1, z, B.TORCH);
-      this.setLore(x, y + 1, z, '山顶的记号',
-        '一个小石堆，几块石头被摆成指向北方的箭头。\n\n风很大，但石堆没有散。\n\n不知道是谁堆的，也不知道北方有什么。');
-    }
-
-    buildCabin(chunk, s) {
-      const { x, z } = s, y = s.y;
-      this.clearTrees(chunk, x - 16, z - 15, x + 16, z + 15);
-      this.clearBox(chunk, x - 7, y, z - 6, x + 7, y + 9, z + 6);
-      for (let dz = -4; dz <= 4; dz++) for (let dx = -5; dx <= 5; dx++) {
         this.fillBelow(chunk, x + dx, y, z + dz);
         this.put(chunk, x + dx, y, z + dz, B.PLANKS);
-        for (let dy = 1; dy <= 4; dy++) this.put(chunk, x + dx, y + dy, z + dz, 0);
       }
-      for (let dz = -4; dz <= 4; dz++) for (let dx = -5; dx <= 5; dx++) {
-        if (Math.abs(dx) !== 5 && Math.abs(dz) !== 4) continue;
-        const corner = Math.abs(dx) === 5 && Math.abs(dz) === 4;
-        const door = dz === 4 && dx >= -1 && dx <= 1;
-        for (let dy = 1; dy <= 4; dy++) {
-          let id = corner ? B.SPRUCE_LOG : B.PLANKS;
-          if (!corner && dy === 3 && (Math.abs(dx) === 5 ? dz % 2 === 0 : dx % 2 === 0))
-            id = B.GLASS;
-          if (door && dy <= 2) id = 0;
+      for (let dz = -3; dz <= 3; dz++) for (let dx = -3; dx <= 3; dx++) {
+        const edge = Math.abs(dx) === 3 || Math.abs(dz) === 3;
+        if (!edge) continue;
+        const corner = Math.abs(dx) === 3 && Math.abs(dz) === 3;
+        const door = dz === 3 && Math.abs(dx) <= 1;
+        for (let dy = 1; dy <= 3; dy++) {
+          if (door && dy <= 2) continue;
+          let id = corner ? B.LOG : B.PLANKS;
+          if (!corner && dy === 2 && (dx + dz) % 3 === 0) id = B.GLASS;
           this.put(chunk, x + dx, y + dy, z + dz, id);
         }
       }
-      // 阶梯式的红瓦坡屋顶，在雪地和森林里都能一眼认出来。
-      for (let dz = -5; dz <= 5; dz++) for (let dx = -6; dx <= 6; dx++)
-        this.put(chunk, x + dx, y + 5, z + dz, B.BRICK);
-      for (let dz = -4; dz <= 4; dz++) for (let dx = -5; dx <= 5; dx++)
-        this.put(chunk, x + dx, y + 6, z + dz, B.BRICK);
-      for (let dz = -3; dz <= 3; dz++) for (let dx = -3; dx <= 3; dx++)
-        this.put(chunk, x + dx, y + 7, z + dz, B.BRICK);
-      for (let dz = -2; dz <= 2; dz++) this.put(chunk, x, y + 8, z + dz, B.BRICK);
-      for (let dy = 5; dy <= 7; dy++) {
-        this.put(chunk, x + 4, y + dy, z - 3, B.COBBLE);
-        this.put(chunk, x + 3, y + dy, z - 3, B.COBBLE);
+      for (let k = 0; k < 3; k++) {
+        const hx = 4 - k, hz = 4 - k;
+        for (let dz = -hz; dz <= hz; dz++) for (let dx = -hx; dx <= hx; dx++)
+          this.put(chunk, x + dx, y + 4 + k, z + dz, k === 1 ? B.SPRUCE_LOG : B.BRICK);
       }
-      this.put(chunk, x + 3, y + 8, z - 3, B.COBBLE);
-      // 门前的小路，两格宽。
-      for (let dz = 5; dz <= 10; dz++) for (let dx = -1; dx <= 1; dx++) {
-        const ground = this.heightAt(x + dx, z + dz);
-        this.put(chunk, x + dx, ground + 1, z + dz, B.COBBLE);
-        for (let dy = 1; dy <= 3; dy++) this.put(chunk, x + dx, ground + 1 + dy, z + dz, 0);
-      }
-      this.put(chunk, x - 3, y + 1, z - 2, B.TABLE);
-      this.put(chunk, x + 3, y + 1, z - 2, B.TORCH);
-      this.put(chunk, x - 3, y + 1, z + 2, B.TABLET);
-      this.setLore(x - 3, y + 1, z + 2, '给走到这里的你',
-        '木屋里有一张桌子、一盏没吹灭的灯，和一本翻到一半的笔记。\n\n“如果你找到这里，说明你没有沿着路走。谢谢。\n这栋房子是我住过最久的地方，现在留给你。”\n\n窗外正对着日出。');
-      // 墙上的像素肖像：不是任何人的脸，但像某个人。
-      const wall = z - 4;
-      for (let i = -2; i <= 2; i++) this.put(chunk, x + i, y + 4, wall + 1, B.TERRACOTTA);
-      for (let i = -2; i <= 2; i++) this.put(chunk, x + i, y + 3, wall + 1, i === 0 ? B.ORANGE_TERRACOTTA : B.WHITE_TERRACOTTA);
-      for (const i of [-1, 1]) this.put(chunk, x + i, y + 3, wall + 1, B.BRICK);
-      for (let i = -1; i <= 1; i++) this.put(chunk, x + i, y + 2, wall + 1, i === 1 ? B.ORANGE_TERRACOTTA : B.WHITE_TERRACOTTA);
-      this.put(chunk, x, y + 2, wall + 1, B.TERRACOTTA);
+      this.put(chunk, x - 2, y + 1, z - 2, B.TABLE);
+      this.put(chunk, x + 2, y + 1, z + 2, B.TORCH);
+      if (s.rot & 1) this.put(chunk, x - 2, y + 1, z + 2, B.WOOL);
     }
 
-    buildLab(chunk, s) {
+    buildRandomTower(chunk, s) {
       const { x, z } = s, y = s.y;
-      this.clearTrees(chunk, x - 9, z - 8, x + 9, z + 9);
-      this.clearBox(chunk, x - 5, y, z - 4, x + 5, y + 6, z + 5);
-      for (let dz = -4; dz <= 4; dz++) for (let dx = -5; dx <= 5; dx++) {
+      const height = 9 + ((N.hash2(x, z, this.seed + 74011) * 9) | 0);
+      const gap = s.rot & 3;
+      this.clearTrees(chunk, x - 5, z - 5, x + 5, z + 5);
+      this.clearBox(chunk, x - 4, y, z - 4, x + 4, y + height + 2, z + 4);
+      for (let dz = -2; dz <= 2; dz++) for (let dx = -2; dx <= 2; dx++) {
         this.fillBelow(chunk, x + dx, y, z + dz);
-        this.put(chunk, x + dx, y, z + dz, B.STONE);
+        this.put(chunk, x + dx, y, z + dz, B.COBBLE);
       }
-      for (let dz = -4; dz <= 4; dz++) for (let dx = -5; dx <= 5; dx++) {
-        const edge = Math.abs(dx) === 5 || Math.abs(dz) === 4;
-        if (!edge) continue;
-        const door = dz === 4 && dx >= -1 && dx <= 1;
-        for (let dy = 1; dy <= 4; dy++) {
-          if (door && dy <= 2) { this.put(chunk, x + dx, y + dy, z + dz, 0); continue; }
-          this.put(chunk, x + dx, y + dy, z + dz,
-            dy === 4 || (Math.abs(dx) === 5 && Math.abs(dz) === 4) ? B.COBBLE : B.STONE);
+      for (let dy = 1; dy <= height; dy++) {
+        const broken = dy > height - 3 && (dy + gap) % 4 === 0;
+        for (let dz = -2; dz <= 2; dz++) for (let dx = -2; dx <= 2; dx++) {
+          if (Math.abs(dx) !== 2 && Math.abs(dz) !== 2) continue;
+          if (broken && (dx + dz + gap) % 3 === 0) continue;
+          this.put(chunk, x + dx, y + dy, z + dz, dy % 5 === 0 ? B.MOSS : B.COBBLE);
         }
       }
-      for (let dz = -4; dz <= 4; dz++) for (let dx = -5; dx <= 5; dx++)
-        this.put(chunk, x + dx, y + 5, z + dz, B.STONE);
-      this.put(chunk, x, y + 1, z, B.GLITCH);
-      this.setLore(x, y + 1, z, 'missing texture',
-        '一块粉黑相间的方块，格格不入。\n\n旁边有一张纸：\n“这不是 bug。\n这是我们在删掉一个世界时，唯一没删干净的地方。\n别挖它。”\n\n屏幕外传来很轻的电流声。');
-      this.put(chunk, x - 3, y + 1, z - 2, B.TABLE);
-      this.put(chunk, x + 3, y + 1, z - 2, B.TORCH);
-      this.put(chunk, x + 2, y + 6, z + 2, B.TORCH);
+      this.put(chunk, x, y + height + 1, z, B.TORCH);
+      this.put(chunk, x + 1, y + 1, z, B.COBBLE);
     }
 
-    buildShip(chunk, s) {
+    buildRandomCamp(chunk, s) {
       const { x, z } = s, y = s.y;
-      for (let dx = -6; dx <= 6; dx++) {
-        const half = Math.abs(dx) >= 5 ? 1 : 2;
-        for (let dz = -half; dz <= half; dz++) {
+      this.clearTrees(chunk, x - 6, z - 6, x + 6, z + 6);
+      this.clearBox(chunk, x - 4, y, z - 4, x + 4, y + 6, z + 4);
+      for (let dz = -2; dz <= 2; dz++) for (let dx = -2; dx <= 2; dx++) {
+        this.fillBelow(chunk, x + dx, y, z + dz);
+        this.put(chunk, x + dx, y, z + dz, B.PLANKS);
+      }
+      for (const [dx, dz] of [[-2, -2], [2, -2], [-2, 2], [2, 2]])
+        this.put(chunk, x + dx, y + 1, z + dz, B.SPRUCE_LOG);
+      for (let dz = -2; dz <= 2; dz++) for (let dx = -2; dx <= 2; dx++) {
+        if (Math.abs(dx) + Math.abs(dz) > 3) continue;
+        this.put(chunk, x + dx, y + 2, z + dz, B.WOOL);
+      }
+      for (let dz = -2; dz <= 2; dz++) for (let dx = -2; dx <= 2; dx++)
+        if (Math.abs(dx) + Math.abs(dz) === 3) this.put(chunk, x + dx, y + 2, z + dz, B.WOOL);
+      this.put(chunk, x, y, z, B.TORCH);
+      for (const [dx, dz] of [[-1, 0], [1, 0], [0, -1], [0, 1]])
+        this.put(chunk, x + dx, y, z + dz, B.COBBLE);
+      for (const dz of [-2, 2]) for (let dx = 1; dx <= 2; dx++)
+        this.put(chunk, x + dx, y + 1, z + dz, B.LOG);
+    }
+
+    buildRandomGarden(chunk, s) {
+      const { x, z } = s, y = s.y;
+      const alongZ = (s.rot & 1) === 0;
+      this.clearTrees(chunk, x - 6, z - 6, x + 6, z + 6);
+      this.clearBox(chunk, x - 5, y, z - 5, x + 5, y + 6, z + 5);
+      for (let dz = -3; dz <= 3; dz++) for (let dx = -3; dx <= 3; dx++) {
+        this.fillBelow(chunk, x + dx, y, z + dz);
+        const fence = Math.abs(dx) === 3 || Math.abs(dz) === 3;
+        if (fence) {
+          if ((alongZ ? dz : dx) % 2 === 0) this.put(chunk, x + dx, y + 1, z + dz, B.SPRUCE_LOG);
           this.put(chunk, x + dx, y, z + dz, B.PLANKS);
-          for (let dy = 1; dy <= 3; dy++) {
-            if (Math.abs(dz) === half || Math.abs(dx) >= 5)
-              this.put(chunk, x + dx, y + dy, z + dz, B.PLANKS);
-          }
-          if (Math.abs(dx) <= 4 && Math.abs(dz) <= 1)
-            this.put(chunk, x + dx, y + 3, z + dz, B.PLANKS);
+          continue;
         }
+        if ((alongZ ? dz : dx) === 0) { this.put(chunk, x + dx, y, z + dz, B.WATER); continue; }
+        this.put(chunk, x + dx, y, z + dz, B.MOSS);
+        if ((dx + dz) % 2 === 0) this.put(chunk, x + dx, y + 1, z + dz, B.PINK_PETALS);
       }
-      for (let dy = 4; dy <= 11; dy++) this.put(chunk, x, y + dy, z, B.SPRUCE_LOG);
-      this.put(chunk, x, y + 12, z, B.BANNER);
-      this.put(chunk, x - 2, y + 4, z, B.TABLET);
-      this.setLore(x - 2, y + 4, z, '沉船日志',
-        '最后一页没有写完。\n\n“……我们看见云上有一块岛。船长说是灯。\n如果有人读到这行字，别去找它——它不亮，它只是在等。”\n\n落款被海水泡烂了。');
+      this.fillBelow(chunk, x - 4, y, z - 4);
+      this.put(chunk, x - 4, y, z - 4, B.COBBLE);
+      this.put(chunk, x - 4, y + 1, z - 4, B.TORCH);
     }
 
-    buildBench(chunk, s) {
+    buildRandomWell(chunk, s) {
       const { x, z } = s, y = s.y;
-      this.clearBox(chunk, x - 3, y, z - 3, x + 3, y + 4, z + 3);
-      for (let dz = -1; dz <= 1; dz++) {
-        this.fillBelow(chunk, x, y, z + dz);
-        this.put(chunk, x, y + 1, z + dz, B.PLANKS);
-        this.put(chunk, x + 1, y + 2, z + dz, B.PLANKS);
-      }
-      this.put(chunk, x, y, z - 1, B.SPRUCE_LOG);
-      this.put(chunk, x, y, z + 1, B.SPRUCE_LOG);
-      this.put(chunk, x - 2, y + 1, z, B.TABLET);
-      this.setLore(x - 2, y + 1, z, '长椅上的话',
-        '长椅正对西边。坐在这里，能看见太阳落进山后。\n\n靠背上刻着一行小字：\n“我在这里等过一个人。\n他没来。但日落很好看。”');
-    }
-
-    buildSky(chunk, s) {
-      const { x, z } = s, y = s.y;
-      this.clearBox(chunk, x - 8, y + 1, z - 8, x + 8, y + 10, z + 8);
-      for (let dz = -6; dz <= 6; dz++) for (let dx = -6; dx <= 6; dx++) {
-        if (dx * dx + dz * dz > 42) continue;
-        this.put(chunk, x + dx, y, z + dz, B.GRASS);
-        this.put(chunk, x + dx, y - 1, z + dz, B.DIRT);
-        this.put(chunk, x + dx, y - 2, z + dz, B.DIRT);
-        this.put(chunk, x + dx, y - 3, z + dz, B.STONE);
-        if (dx * dx + dz * dz <= 22) {
-          this.put(chunk, x + dx, y - 4, z + dz, B.STONE);
-          this.put(chunk, x + dx, y - 5, z + dz, B.STONE);
-        }
-        if (dx * dx + dz * dz <= 8) this.put(chunk, x + dx, y - 6, z + dz, B.STONE);
-      }
-      this.placeTree(chunk, x - 2, y, z, 'oak', this.seed);
-      for (let dy = 1; dy <= 4; dy++) this.put(chunk, x + 4, y + dy, z, B.SPRUCE_LOG);
-      this.put(chunk, x + 4, y + 5, z, B.BANNER);
-      this.put(chunk, x - 3, y + 1, z, B.TABLET);
-      this.setLore(x - 3, y + 1, z, '云上的旗',
-        '旗子是新的，风把它拉得很直。\n\n一张压在石头下的纸条：\n“你居然真的上来了。\n这个世界没有终点，也没有任务。\n往哪走都行。”\n\n字迹很轻松，像在笑。');
-    }
-
-    buildTablet(chunk, s) {
-      const { x, z } = s, y = s.y;
-      this.clearBox(chunk, x - 2, y, z - 2, x + 2, y + 4, z + 2);
-      for (let dz = -1; dz <= 1; dz++) for (let dx = -1; dx <= 1; dx++) {
+      this.clearTrees(chunk, x - 4, z - 4, x + 4, z + 4);
+      this.clearBox(chunk, x - 3, y, z - 3, x + 3, y + 6, z + 3);
+      for (let dz = -2; dz <= 2; dz++) for (let dx = -2; dx <= 2; dx++) {
         this.fillBelow(chunk, x + dx, y, z + dz);
-        this.put(chunk, x + dx, y, z + dz, s.biome === 'snow' ? B.SNOW : B.COBBLE);
+        if (Math.abs(dx) === 2 || Math.abs(dz) === 2) {
+          this.put(chunk, x + dx, y, z + dz, B.COBBLE);
+          this.put(chunk, x + dx, y + 1, z + dz, B.COBBLE);
+          this.put(chunk, x + dx, y + 2, z + dz, B.COBBLE);
+        } else {
+          this.put(chunk, x + dx, y, z + dz, B.WATER);
+        }
       }
-      this.put(chunk, x, y + 1, z, B.TABLET);
-      this.put(chunk, x + 1, y + 1, z, B.TORCH);
-      const text = TABLET_TEXTS[s.biome];
-      if (text) this.setLore(x, y + 1, z, text[0], text[1]);
+      for (const dx of [-2, 2]) for (const dz of [-2, 2])
+        for (let dy = 3; dy <= 4; dy++) this.put(chunk, x + dx, y + dy, z + dz, B.SPRUCE_LOG);
+      for (let dz = -2; dz <= 2; dz++) for (let dx = -2; dx <= 2; dx++)
+        this.put(chunk, x + dx, y + 5, z + dz, B.BRICK);
+      this.put(chunk, x, y + 4, z, B.TORCH);
+    }
+
+    buildRandomRuin(chunk, s) {
+      const { x, z } = s, y = s.y;
+      const tall = 4 + (s.rot & 3);
+      this.clearTrees(chunk, x - 5, z - 5, x + 5, z + 5);
+      this.clearBox(chunk, x - 4, y, z - 4, x + 4, y + 9, z + 4);
+      for (let dz = -2; dz <= 2; dz++) for (let dx = -2; dx <= 2; dx++) {
+        this.fillBelow(chunk, x + dx, y, z + dz);
+        this.put(chunk, x + dx, y, z + dz, (dx + dz) % 2 === 0 ? B.COBBLE : B.MOSS);
+      }
+      for (const side of [-1, 1]) {
+        this.fillBelow(chunk, x + side * 2, y, z);
+        for (let dy = 1; dy <= tall + (side > 0 ? 2 : 0); dy++) {
+          if (dy === 3 && side < 0) continue;
+          this.put(chunk, x + side * 2, y + dy, z, B.COBBLE);
+        }
+      }
+      for (let dx = -2; dx <= 2; dx++) this.put(chunk, x + dx, y + tall + 1, z, B.COBBLE);
+      this.put(chunk, x, y + 1, z, B.TABLE);
+      this.put(chunk, x + 1, y + 1, z + 2, B.TORCH);
+      this.put(chunk, x - 2, y, z + 2, B.COAL_ORE);
+    }
+
+    buildSpawn(chunk, s) {
+      // 只清树，不动地形；出生点在一小片空地上，视野不会被树干堵住。
+      this.clearTrees(chunk, s.x - 7, s.z - 7, s.x + 7, s.z + 7);
+    }
+
+    /* ---------------- 彩蛋：四个有实体的地方 ---------------- */
+
+    // 画架：在一处能看见远山的高地上，[x] 是一张没画完的画。
+    buildEasel(chunk, s) {
+      const { x, z } = s, y = s.y;
+      this.clearTrees(chunk, x - 7, z - 7, x + 7, z + 7);
+      this.clearBox(chunk, x - 4, y, z - 4, x + 4, y + 7, z + 4);
+      for (let dz = -3; dz <= 3; dz++) for (let dx = -3; dx <= 3; dx++) {
+        if (dx * dx + dz * dz > 9) continue;
+        this.fillBelow(chunk, x + dx, y, z + dz);
+        this.put(chunk, x + dx, y, z + dz, B.GRASS);
+      }
+      // 两根立柱，中间挂一块窄画布——画架不该像一块广告牌。
+      for (const dx of [-1, 1]) {
+        for (let dy = 1; dy <= 2; dy++) this.put(chunk, x + dx, y + dy, z, B.SPRUCE_LOG);
+      }
+      for (let dy = 1; dy <= 2; dy++) this.put(chunk, x, y + dy, z, B.WHITE_TERRACOTTA);
+      // 画箱、凳子、散落的颜料。
+      this.put(chunk, x - 2, y + 1, z + 1, B.TERRACOTTA);
+      this.put(chunk, x + 2, y + 1, z + 1, B.PLANKS);
+      this.put(chunk, x + 2, y + 2, z + 1, B.TERRACOTTA);
+    }
+
+    // 井：石砌井台、两格深的黑水、一顶木棚。
+    buildWell(chunk, s) {
+      const { x, z } = s, y = s.y;
+      this.clearTrees(chunk, x - 7, z - 7, x + 7, z + 7);
+      this.clearBox(chunk, x - 5, y, z - 5, x + 5, y + 11, z + 5);
+      for (let dz = -2; dz <= 2; dz++) for (let dx = -2; dx <= 2; dx++) {
+        this.fillBelow(chunk, x + dx, y, z + dz);
+        this.put(chunk, x + dx, y, z + dz, B.GRASS);
+      }
+      for (let dz = -1; dz <= 1; dz++) for (let dx = -1; dx <= 1; dx++) {
+        if (dx === 0 && dz === 0) {
+          this.put(chunk, x, y, z, B.WATER);
+          continue;
+        }
+        for (let dy = 0; dy <= 1; dy++) this.put(chunk, x + dx, y + dy, z + dz, B.COBBLE);
+      }
+      for (const [dx, dz] of [[-1, -1], [1, 1]]) {
+        for (let dy = 2; dy <= 3; dy++) this.put(chunk, x + dx, y + dy, z + dz, B.SPRUCE_LOG);
+      }
+      for (let dz = -1; dz <= 1; dz++) for (let dx = -1; dx <= 1; dx++)
+        this.put(chunk, x + dx, y + 4, z + dz, B.PLANKS);
+      // 一只倒扣的木桶，和一截井绳。
+      this.put(chunk, x + 2, y + 1, z, B.PLANKS);
+      this.put(chunk, x - 2, y + 1, z + 1, B.COBBLE);
+    }
+
+    // 鞋：沙滩上并排的两只旧鞋，鞋尖朝海。
+    buildShoes(chunk, s) {
+      const { x, z } = s, y = s.y;
+      this.clearBox(chunk, x - 5, y, z - 5, x + 5, y + 3, z + 5);
+      for (let dz = -2; dz <= 2; dz++) for (let dx = -2; dx <= 2; dx++) {
+        this.fillBelow(chunk, x + dx, y, z + dz);
+        this.put(chunk, x + dx, y, z + dz, B.SAND);
+      }
+      this.put(chunk, x, y + 1, z, B.TERRACOTTA);
+      this.put(chunk, x + 1, y + 1, z, B.TERRACOTTA);
+      // 旁边是一截被浪冲上来的木头。
+      for (let dz = -2; dz <= 0; dz++) this.put(chunk, x - 2, y + 1, z + dz, B.SPRUCE_LOG);
+    }
+
+    // 石堆：三层，最上面那块下面压着东西。
+    buildKey(chunk, s) {
+      const { x, z } = s, y = s.y;
+      this.clearTrees(chunk, x - 5, z - 5, x + 5, z + 5);
+      this.clearBox(chunk, x - 4, y, z - 4, x + 4, y + 6, z + 4);
+      for (let dz = -2; dz <= 2; dz++) for (let dx = -2; dx <= 2; dx++) {
+        if (dx * dx + dz * dz > 4) continue;
+        this.fillBelow(chunk, x + dx, y, z + dz);
+        this.put(chunk, x + dx, y, z + dz, B.GRASS);
+      }
+      for (let dz = -1; dz <= 1; dz++) for (let dx = -1; dx <= 1; dx++)
+        this.put(chunk, x + dx, y + 1, z + dz, B.COBBLE);
+      for (let dz = -1; dz <= 1; dz++) for (let dx = -1; dx <= 1; dx++) {
+        if (Math.abs(dx) + Math.abs(dz) > 1) continue;
+        this.put(chunk, x + dx, y + 2, z + dz, B.STONE);
+      }
+      this.put(chunk, x, y + 3, z, B.STONE);
     }
 
     buildGiant(chunk, s) {
@@ -1534,10 +1605,31 @@
     findSpawn() {
       if (this.glacier) {
         const v = this.glacier;
-        // 从冰川谷入口看向群峰；不要把玩家放在旧湖边。
-        const x = Math.round(v.x - v.rx * 0.58), z = Math.round(v.z - v.rz * 0.63);
+        // 从冰川谷入口看向群峰。种子会挪动山体，所以在这一带找一块
+        // 平坦、开阔、朝向谷口的雪地，而不是死守一个坐标。
+        const baseX = Math.round(v.x - v.rx * 0.58), baseZ = Math.round(v.z - v.rz * 0.63);
+        let best = { x: baseX, z: baseZ, h: this.heightAt(baseX, baseZ) };
+        let bestScore = -1e9;
+        for (let dz = -48; dz <= 48; dz += 6) {
+          for (let dx = -48; dx <= 48; dx += 6) {
+            const x = baseX + dx, z = baseZ + dz;
+            const h = this.heightAt(x, z);
+            if (h <= SEA + 4 || h > 84) continue;
+            if (this.glacierWeight(x, z) < 0.34) continue;
+            let slope = 0;
+            for (const d of [4, 8, 12]) {
+              slope = Math.max(slope,
+                Math.abs(this.heightAt(x + d, z) - h), Math.abs(this.heightAt(x - d, z) - h),
+                Math.abs(this.heightAt(x, z + d) - h), Math.abs(this.heightAt(x, z - d) - h));
+            }
+            if (slope > 8) continue;
+            const score = -slope * 4 - Math.abs(h - 62) * 0.16 - Math.hypot(dx, dz) * 0.05;
+            if (score > bestScore) { bestScore = score; best = { x, z, h }; }
+          }
+        }
+        const x = best.x, z = best.z;
         const dx = v.x + 20 - x, dz = v.z + 130 - z;
-        return { x: x + 0.5, y: this.heightAt(x, z) + 1.2, z: z + 0.5,
+        return { x: x + 0.5, y: best.h + 1.2, z: z + 0.5,
           yaw: Math.atan2(-dx, -dz), pitch: -0.09 };
       }
       // 挑一个「靠海 + 有起伏」的出生点，第一眼就有风景

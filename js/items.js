@@ -184,41 +184,6 @@
   def({ id: 114, key: 'raw_beef', name: '生牛肉', kind: 'food', sprite: rawMeat('raw_beef', [164, 67, 68], [195, 93, 92], [126, 47, 51]) });
   def({ id: 115, key: 'raw_pork', name: '生猪肉', kind: 'food', sprite: rawMeat('raw_pork', [218, 130, 132], [242, 160, 158], [179, 96, 105]) });
 
-  /* ---------- 只有彩蛋会给出的物品（没有数值加成） ---------- */
-  addTile('item_broken_steel', (d) => {
-    const steel = [198, 208, 214], steelD = [126, 137, 146], gold = [214, 178, 88], goldD = [166, 130, 52];
-    // 断掉的剑身
-    for (let i = 0; i < 6; i++) {
-      px(d, 8 + i, 9 - i, steel);
-      px(d, 9 + i, 9 - i, steelD);
-    }
-    px(d, 13, 3, steel); px(d, 14, 3, steelD); px(d, 13, 4, steelD);
-    // 断口
-    px(d, 8, 10, [92, 100, 108]); px(d, 9, 9, [92, 100, 108]);
-    // 护手与握柄
-    for (let i = 0; i < 5; i++) { px(d, 4 + i, 11, gold); px(d, 4 + i, 12, goldD); }
-    for (let i = 0; i < 3; i++) { px(d, 3 + i, 13 - i, wood); px(d, 4 + i, 13 - i, woodL); }
-    px(d, 4, 11, [244, 214, 124]);
-  });
-  def({ id: 116, key: 'broken_steel', name: '断钢', kind: 'material', sprite: MC.Atlas.index.item_broken_steel });
-
-  addTile('item_moon_wool', (d) => {
-    rect(d, 0, 0, 16, 16, [226, 231, 240]);
-    for (let y = 1; y < 15; y++) for (let x = 1; x < 15; x++) {
-      if ((x + y) % 3 === 0) px(d, x, y, [246, 249, 255]);
-      if ((x * 3 + y * 5) % 7 === 0) px(d, x, y, [199, 208, 226]);
-    }
-    // 一枚月牙
-    for (let y = 3; y <= 12; y++) for (let x = 5; x <= 12; x++) {
-      const dx = x - 10, dy = y - 8;
-      const outer = dx * dx + dy * dy <= 20;
-      const inner = (dx - 3) * (dx - 3) + dy * dy <= 18;
-      if (outer && !inner) px(d, x, y, [255, 249, 210]);
-    }
-    for (let i = 0; i < 3; i++) px(d, 4 + i * 3, 2 + (i % 2) * 11, [255, 255, 255]);
-  });
-  def({ id: 117, key: 'moon_wool', name: '月光羊毛', kind: 'material', sprite: MC.Atlas.index.item_moon_wool });
-
   /* ---------- 工具 ---------- */
   const TIERS = [
     { key: 'wood', name: '木', speed: 2.5, durability: 59, c: [[150, 110, 64], [176, 136, 86], [112, 80, 44]] },
@@ -330,8 +295,8 @@
   const blockOf = (id) => (ITEMS[id] && ITEMS[id].block) || 0;
   const toolOf = (id) => (ITEMS[id] && ITEMS[id].tool) || null;
 
-  // 彩蛋方块与奖励不放进创造页，避免提前剧透。
-  MC.SECRET_ITEMS = new Set([40, 41, 42, 43, 116, 117]);
+  // 旧版彩蛋留下的方块仍然保留编号（避免改动方块 id），只是不再出现。
+  MC.SECRET_ITEMS = new Set([40, 41, 42, 43]);
   MC.ITEMS = ITEMS;
   MC.ITEM_KEY = KEY;
   MC.itemById = byId;

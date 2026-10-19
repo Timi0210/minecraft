@@ -427,10 +427,10 @@
     #invGrid { grid-template-columns: repeat(4, 1fr); }
   }
 </style>
-<link rel="stylesheet" href="css/redesign.css?v=9">
+<link rel="stylesheet" href="css/redesign.css?v=10">
 <link rel="stylesheet" href="css/studio.css?v=1">
-<link rel="stylesheet" href="css/field-ui.css?v=1">
-<link rel="stylesheet" href="css/expedition-ui.css?v=1">
+<link rel="stylesheet" href="css/field-ui.css?v=2">
+<link rel="stylesheet" href="css/expedition-ui.css?v=2">
 </head>
 <body>
 <canvas id="game"></canvas>
@@ -469,22 +469,22 @@
 
 <div id="touch" class="hide" aria-label="触屏操作">
   <div id="touchLook"></div>
+  <div id="stickZone" aria-hidden="true"></div>
   <div id="stickBase" aria-label="移动摇杆"><div id="stickKnob"></div></div>
   <div id="touchBtns">
     <button class="touchBtn" id="touchMenu" type="button" aria-label="暂停">☰</button>
     <button class="touchBtn" id="touchBag" type="button" aria-label="景观素材">▦</button>
     <button class="touchBtn" id="touchFly" type="button" aria-label="飞行">✈</button>
     <button class="touchBtn" id="touchDown" type="button" aria-label="下降">↓</button>
-    <button class="touchBtn big" id="touchPlace" type="button" aria-label="放置">▣</button>
     <button class="touchBtn big" id="touchJump" type="button" aria-label="跳跃">↑</button>
-    <button class="touchBtn big" id="touchMine" type="button" aria-label="挖掘">⛏</button>
+    <button class="touchBtn big actionBtn" id="touchPlace" type="button" aria-label="点按放置方块，长按拆除"><span class="actionIcon">▣</span><span class="actionLabel">点按放 · 长按拆</span></button>
   </div>
   <div id="touchQuick" aria-label="手机景观工具">
     <button id="touchPhoto" type="button" aria-label="拍照">◎ <span>拍照</span></button>
     <button id="touchGallery" type="button" aria-label="相册">▤ <span>相册</span></button>
     <button id="touchTime" type="button" aria-label="切换时段">☀ <span>时光</span></button>
   </div>
-  <div id="touchHint">左手移动 · 右手环顾 · 右下角建造</div>
+  <div id="touchHint">左手移动 · 右手环顾 · 点按放置，长按拆除</div>
 </div>
 
 <div id="overlay">
@@ -505,7 +505,7 @@
           <button class="btn ghost" id="inputBtn" title="切换手机触屏 / 键鼠操作">操作：自动</button>
         </div>
         <p class="deviceHint" id="deviceHint"></p>
-        <p class="mobileHelp" id="mobileHelp" hidden>手机操作：左手移动，右手环顾；▣ 放置、⛏ 拆除，顶部可以拍照。横屏视野更开阔。</p>
+        <p class="mobileHelp" id="mobileHelp" hidden>手机操作：左手移动，右手环顾；▣ 短按放置、长按拆除，摇杆会跟着手指浮到左半屏任意位置。顶部可以拍照，横屏视野更开阔。</p>
         <details class="graphicsSettings">
           <summary>画面设置 <span>即时生效 · 自动记住</span></summary>
           <div class="graphicsGrid">
@@ -526,12 +526,12 @@
         <div class="asideQuote">“世界很大，<br>先在喜欢的地方停下。”</div>
       </aside>
     </div>
-    <div class="panelFoot"><span>世界与照片保存在这台设备上</span><details class="controlsDisclosure"><summary>操作指南 ↗</summary><div class="controls"><span><kbd>WASD</kbd> 移动 · 鼠标环顾</span><span><kbd>左键</kbd> 拆除 · <kbd>右键</kbd> 放置</span><span><kbd>R</kbd> 打开物资箱 / 穿越传送门</span><span><kbd>E</kbd> 素材 · <kbd>P</kbd> 拍照 · <kbd>G</kbd> 相册</span><span><kbd>F</kbd> 飞行 · <kbd>T</kbd> 时段 · <kbd>M</kbd> 地图</span><span>手机：左手移动 · 右手看风景 · 点击互动按钮</span></div></details></div>
+    <div class="panelFoot"><span>世界与照片保存在这台设备上</span><details class="controlsDisclosure"><summary>操作指南 ↗</summary><div class="controls"><span><kbd>WASD</kbd> 移动 · 鼠标环顾</span><span><kbd>左键</kbd> 拆除 · <kbd>右键</kbd> 放置</span><span><kbd>R</kbd> 打开物资箱 · 走进传送门即穿越</span><span><kbd>E</kbd> 素材 · <kbd>P</kbd> 拍照 · <kbd>G</kbd> 相册</span><span><kbd>F</kbd> 飞行 · <kbd>T</kbd> 时段 · <kbd>M</kbd> 地图</span><span>手机：左手移动 · 右手看风景 · 短按放置、长按拆除</span></div></details></div>
   </div>
 </div>
 
 <div id="loot" class="hide" role="dialog" aria-modal="true" aria-label="雪谷补给箱">
-  <div class="lootPanel"><div class="lootEyebrow">ALPINE OUTPOST / 物资间</div><h2>雪谷补给箱</h2><p>有人为后来经过雪谷的人，留下了一点路上的东西。</p><div id="lootItems" class="lootItems"></div><div class="lootActions"><button id="lootTake" type="button">收下物品</button><button id="lootClose" type="button">返回世界</button></div></div>
+  <div class="lootPanel"><div class="lootEyebrow">ALPINE OUTPOST / 物资间</div><h2>雪谷补给箱</h2><p>有人为后来经过雪谷的人，留下了一点路上的东西。每次只拿走一样。</p><div id="lootItems" class="lootItems"></div><div class="lootActions"><span class="lootHint">点一下物品，就收进背包</span><button id="lootClose" type="button">返回世界</button></div></div>
 </div>
 <div id="travelCurtain" class="hide" aria-live="polite"><span>✦</span><strong id="travelTitle">穿越中</strong><small>正在展开另一片天地</small></div>
 
@@ -609,15 +609,13 @@
 
 <div id="read" class="hide" role="dialog" aria-label="阅读">
   <div class="readPanel">
-    <div class="readTop"><span>远野 / 手记</span><button class="readClose" id="readClose" type="button">合上 ×</button></div>
-    <h2 id="readTitle">石碑</h2>
+    <div class="readTop"><span>栖野 / 手记</span><button class="readClose" id="readClose" type="button">合上 ×</button></div>
+    <h2 id="readTitle">手记</h2>
     <div class="readBody" id="readText"></div>
     <div class="readFoot"><span>按 <kbd>Esc</kbd> 或点击空白处合上</span><span id="readHint"></span></div>
   </div>
 </div>
 
-<div id="aurora" aria-hidden="true"></div>
-<div id="meteors" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
 <div id="flash" aria-hidden="true"></div>
 
 <div id="minebar"><i id="minefill"></i></div>
@@ -626,20 +624,20 @@
 
 <script src="js/noise.js?v=59"></script>
 <script src="js/blocks.js?v=76"></script>
-<script src="js/world.js?v=74"></script>
+<script src="js/world.js?v=77"></script>
 <script src="js/mesher.js?v=60"></script>
 <script src="js/batch.js?v=1"></script>
 <script src="js/renderer.js?v=70"></script>
-<script src="js/horizon.js?v=5"></script>
+<script src="js/horizon.js?v=6"></script>
 <script src="js/particles.js?v=60"></script>
 <script src="js/viewmodel.js?v=58"></script>
 <script src="js/player.js?v=64"></script>
-<script src="js/items.js?v=61"></script>
+<script src="js/items.js?v=62"></script>
 <script src="js/crafting.js?v=59"></script>
-<script src="js/mobs.js?v=60"></script>
+<script src="js/mobs.js?v=61"></script>
 <script src="js/minimap.js?v=65"></script>
-<script src="js/secrets.js?v=5"></script>
+<script src="js/secrets.js?v=10"></script>
 <script src="js/settings.js?v=3"></script>
-<script src="js/main.js?v=76"></script>
+<script src="js/main.js?v=78"></script>
 </body>
 </html>

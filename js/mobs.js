@@ -89,6 +89,10 @@
       this.hurtTime = 0;
       this.deathTime = 0;
       this.dying = false;
+      this.panic = 0;
+      this.jumpCooldown = 0;
+      this.probe = 0;
+      this.stuck = 0;
     }
 
     inWater(world) {
@@ -157,10 +161,44 @@
       }
     }
 
+    /* 看看脚前方：悬崖、深水、熔岩都算危险。 */
+    aheadUnsafe(world) {
+      const dx = -Math.sin(this.yaw), dz = -Math.cos(this.yaw);
+      const bx = Math.floor(this.pos[0] + dx * 1.1);
+      const bz = Math.floor(this.pos[2] + dz * 1.1);
+      const by = Math.floor(this.pos[1] + 0.08);
+      const below = world.getBlock(bx, by - 1, bz);
+      const at = world.getBlock(bx, by, bz);
+      const above = world.getBlock(bx, by + 1, bz);
+      if (MC.Block.isLiquid(below) || MC.Block.isLiquid(at)) return true;
+      if (!MC.Block.isSolid(below) && !MC.Block.isSolid(at) && !MC.Block.isSolid(above)) return true;
+      return false;
+    }
+
+    /* 换一个安全的朝向，而不是原地转圈。 */
+    pickYaw(world) {
+      for (let i = 0; i < 8; i++) {
+        const yaw = Math.random() * Math.PI * 2;
+        const dx = -Math.sin(yaw), dz = -Math.cos(yaw);
+        const bx = Math.floor(this.pos[0] + dx * 1.15);
+        const bz = Math.floor(this.pos[2] + dz * 1.15);
+        const by = Math.floor(this.pos[1] + 0.08);
+        const below = world.getBlock(bx, by - 1, bz);
+        const at = world.getBlock(bx, by, bz);
+        const above = world.getBlock(bx, by + 1, bz);
+        if (MC.Block.isLiquid(below) || MC.Block.isLiquid(at)) continue;
+        if (!MC.Block.isSolid(below) && !MC.Block.isSolid(at) && !MC.Block.isSolid(above)) continue;
+        return yaw;
+      }
+      return this.yaw + Math.PI * (0.5 + Math.random());
+    }
+
     update(dt, world) {
       this.world = world;
       this.age += dt;
       this.hurtTime = Math.max(0, this.hurtTime - dt);
+      this.panic = Math.max(0, this.panic - dt);
+      this.jumpCooldown = Math.max(0, this.jumpCooldown - dt);
       if (this.dying) {
         this.deathTime -= dt;
         if (this.deathTime <= 0) this.dead = true;
@@ -169,26 +207,33 @@
       const water = this.inWater(world);
 
       this.think -= dt;
-      if (this.think <= 0) {
-        this.think = 1.4 + Math.random() * 3.2;
-        if (Math.random() < 0.55) {
+      if (this.panic > 0 && this.player) {
+        // 被打之后先跑开，而不是继续低头乱走。
+        this.mode = 'walk';
+        const dx = this.pos[0] - this.player.pos[0];
+        const dz = this.pos[2] - this.player.pos[2];
+        if (dx * dx + dz * dz > 1e-4) this.yaw = Math.atan2(-dx, -dz);
+      } else if (this.think <= 0) {
+        this.think = 1.8 + Math.random() * 3.2;
+        if (Math.random() < 0.52) {
           this.mode = 'walk';
-          this.yaw = Math.random() * Math.PI * 2;
+          this.yaw = this.pickYaw(world);
         } else {
           this.mode = 'idle';
         }
       }
 
       let speed = this.mode === 'walk' ? this.speed : 0;
-      if (water) speed *= 0.5;
+      if (this.panic > 0) speed = this.speed * 1.7;
+      if (water) speed *= 0.45;
 
-      // 前方一格：悬崖或深水时掉头
-      if (this.mode === 'walk' && this.onGround && Math.random() < 0.02) {
-        const fx = Math.floor(this.pos[0] - Math.sin(this.yaw) * 0.9);
-        const fz = Math.floor(this.pos[2] - Math.cos(this.yaw) * 0.9);
-        const below = world.getBlock(fx, Math.floor(this.pos[1]) - 1, fz);
-        if (!MC.Block.isSolid(below) || MC.Block.isLiquid(below)) {
-          this.yaw += Math.PI * (0.6 + Math.random() * 0.6);
+      // 每 0.2 秒左右看一眼前方，悬崖和水边提前掉头。
+      if (this.mode === 'walk' && !water && this.probe <= 0) {
+        this.probe = 0.18 + Math.random() * 0.14;
+        if (this.aheadUnsafe(world)) {
+          this.yaw = this.pickYaw(world);
+          speed = 0;
+          this.think = Math.max(this.think, 0.7);
         }
       }
 
@@ -197,20 +242,50 @@
       this.vel[2] += (-Math.cos(this.yaw) * speed - this.vel[2]) * k;
 
       if (water) {
-        this.vel[1] = Math.min(this.vel[1] + 18 * dt, 1.4);
+        // 浮出水面，并保留一点前冲；这样能自己从水里爬上岸。
+        this.vel[1] = Math.min(this.vel[1] + 20 * dt, 2.4);
+        this.vel[0] *= 0.995;
+        this.vel[2] *= 0.995;
       } else {
         this.vel[1] -= 30 * dt;
         if (this.vel[1] < -50) this.vel[1] = -50;
       }
 
+      const beforeX = this.pos[0], beforeZ = this.pos[2];
       this.blocked = false;
       this.onGround = false;
       this.moveAxis(1, this.vel[1] * dt);
       this.moveAxis(0, this.vel[0] * dt);
       this.moveAxis(2, this.vel[2] * dt);
 
-      // 撞墙就跳一下
-      if (this.blocked && this.onGround && Math.random() < 0.25) this.vel[1] = 7.2;
+      // 被挡住：一格高的台阶就跳，太高的墙就换方向，不再每帧乱跳。
+      if (this.blocked && this.onGround && this.jumpCooldown <= 0 && this.mode === 'walk') {
+        const dx = -Math.sin(this.yaw), dz = -Math.cos(this.yaw);
+        const bx = Math.floor(this.pos[0] + dx * 0.8);
+        const bz = Math.floor(this.pos[2] + dz * 0.8);
+        const by = Math.floor(this.pos[1] + 0.1);
+        const step = world.getBlock(bx, by, bz);
+        const head = world.getBlock(bx, by + 1, bz);
+        if (MC.Block.isSolid(step) && !MC.Block.isSolid(head)) {
+          this.vel[1] = 7.9;
+          this.jumpCooldown = 1.15;
+        } else {
+          this.yaw += Math.PI * (0.55 + Math.random() * 0.9);
+          this.think = Math.max(this.think, 1.2);
+        }
+      }
+
+      const moved = Math.hypot(this.pos[0] - beforeX, this.pos[2] - beforeZ);
+      if (this.mode === 'walk' && speed > 0.1 && moved < speed * dt * 0.25) {
+        this.stuck += dt;
+        if (this.stuck > 0.55) {
+          this.yaw += Math.PI * (0.6 + Math.random());
+          this.stuck = 0;
+          this.think = Math.max(this.think, 1.2);
+        }
+      } else {
+        this.stuck = Math.max(0, this.stuck - dt * 2);
+      }
 
       const hs = Math.hypot(this.vel[0], this.vel[2]);
       if (hs > 0.1) this.phase += dt * (4 + hs * 4);
@@ -224,7 +299,8 @@
       this.vel[0] += dx * 4;
       this.vel[2] += dz * 4;
       this.vel[1] = Math.max(this.vel[1], 2.5);
-      this.mode = 'idle';
+      this.mode = 'walk';
+      this.panic = 2.4 + Math.random() * 1.6;
       this.think = 0.6;
       if (this.health <= 0) {
         this.dying = true;
@@ -355,7 +431,6 @@
       const flash = this.dying ? 1 : this.hurtTime > 0 ? 0.8 : 0;
       for (let i = first; i < out.length; i++) {
         out[i].flash = flash;
-        if (this.moonlit) out[i].glow = 1;
       }
     }
   }
@@ -449,16 +524,21 @@
         const chunk = W.getChunk(x >> 4, z >> 4);
         if (!chunk || !chunk.generated) continue;
 
-        let top = -1;
+        // 用真实地表高度，而不是往下扫描到的第一块固体：这样不会生成在树冠、
+        // 屋顶或悬空结构上，动物也就不会一出现就站在半空里。
         const nether = W.isNether(x, z);
-        for (let y = nether ? 112 : MC.WORLD.HEIGHT - 3; y > 1; y--) {
-          if (MC.Block.isSolid(W.getBlock(x, y, z))) { top = y; break; }
-        }
-        if (top < 0) continue;
+        const top = W.heightAt(x, z);
+        if (top < 2 || top >= MC.WORLD.HEIGHT - 5) continue;
         const ground = W.getBlock(x, top, z);
+        if (!MC.Block.isSolid(ground)) continue;
         if (nether ? (ground !== MC.Block.NETHERRACK && ground !== MC.Block.SOUL_SAND && ground !== MC.Block.BASALT) :
             (ground !== MC.Block.GRASS && ground !== MC.Block.SNOW && ground !== MC.Block.SAND)) continue;
-        if (W.getBlock(x, top + 1, z) !== 0 || W.getBlock(x, top + 2, z) !== 0) continue;
+        // 头顶要有一小片天空，避免生成在洞穴、树冠或屋子里。
+        let open = true;
+        for (let k = 1; k <= 4; k++) {
+          if (MC.Block.isSolid(W.getBlock(x, top + k, z))) { open = false; break; }
+        }
+        if (!open) continue;
         if (MC.Block.isLiquid(W.getBlock(x, top + 1, z))) continue;
 
         const biome = W.biomeAt(x, z, top);

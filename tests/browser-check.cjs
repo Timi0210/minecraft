@@ -10,13 +10,21 @@ const { chromium } = require(process.env.MC_PLAYWRIGHT_PATH || 'playwright-core'
     const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
     const errors = [];
     page.on('pageerror', error => errors.push(error.message));
-    await page.goto(pathToFileURL(path.resolve(__dirname, '../index.html')).href + '?auto=1&seed=2024');
+    await page.goto(pathToFileURL(path.resolve(__dirname, '../index.html')).href + '?auto=1&seed=2024&debug');
     await page.waitForFunction(() => window.__mc?.state.mode === 'playing', null, { timeout: 120000 });
 
     assert.equal(await page.title(), '栖野 · 一座可以亲手布置的世界');
     assert.equal(await page.locator('#sceneDock button').count(), 4);
     assert.equal(await page.evaluate(() => __mc.touchMode), false);
     assert.equal(await page.evaluate(() => __mc.state.hotbar[0].id), 1);
+
+    // 准星正中：桌面和手机共用同一套定位。
+    const crosshair = await page.evaluate(() => {
+      const b = document.getElementById('crosshair').getBoundingClientRect();
+      return { x: b.left + b.width / 2, y: b.top + b.height / 2, vx: innerWidth / 2, vy: innerHeight / 2 };
+    });
+    assert(Math.abs(crosshair.x - crosshair.vx) < 0.6, '准星应在水平正中');
+    assert(Math.abs(crosshair.y - crosshair.vy) < 0.6, '准星应在垂直正中');
 
     // 可见区块应合并进共享页：支持 multi-draw 时绘制命令远少于区块数。
     const batching = await page.evaluate(() => ({
@@ -55,6 +63,36 @@ const { chromium } = require(process.env.MC_PLAYWRIGHT_PATH || 'playwright-core'
     await page.keyboard.press('g');
     assert.equal(await page.locator('#galleryGrid .photoCard').count(), 1);
     await page.locator('#galleryClose').click();
+
+    // 补给箱不再有「一键收下」：点哪一样拿哪一样。
+    const chest = await page.evaluate(() => {
+      __mc.debug.teleport(__mc.world.outpostChest.x + 0.5, __mc.world.outpostChest.y, __mc.world.outpostChest.z + 0.5);
+      return __mc.world.outpostChest;
+    });
+    await page.waitForTimeout(1500);
+    await page.keyboard.press('r');
+    await page.waitForFunction(() => __mc.state.mode === 'loot', null, { timeout: 5000 });
+    assert.equal(await page.locator('#lootTake').count(), 0);
+    assert.equal(await page.locator('.lootItem').count(), 6);
+    const firstBefore = await page.locator('.lootItem').first().innerText();
+    await page.locator('.lootItem').first().click();
+    const firstAfter = await page.locator('.lootItem').first().innerText();
+    assert.notEqual(firstBefore, firstAfter);
+    assert(await page.locator('.lootItem').first().isDisabled());
+    assert.equal(await page.locator('.lootItem:not([disabled])').count(), 5);
+    await page.locator('#lootClose').click();
+    assert.equal(await page.evaluate(() => __mc.state.mode), 'playing');
+
+    // 走进传送门就穿越，不再需要按钮。
+    await page.evaluate(() => {
+      const p = __mc.world.outpostPortal;
+      __mc.player.flying = true;
+      __mc.player.pos = [p.x + 1.5, p.y + 1.1, p.z + 0.5];
+      __mc.player.vel.fill(0);
+    });
+    await page.waitForFunction(() => __mc.world.isNether(__mc.player.pos[0], __mc.player.pos[2]),
+      null, { timeout: 8000 });
+    assert(chest && await page.evaluate(() => __mc.world.isNether(__mc.player.pos[0], __mc.player.pos[2])));
 
     await page.evaluate(() => window.dispatchEvent(new Event('pagehide')));
     await page.reload();

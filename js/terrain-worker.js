@@ -1,7 +1,7 @@
 /* terrain-worker.js — 在后台生成方块和完整网格，主线程只负责上传。 */
 self.window = self;
 self.MC = { skipAtlas: true };
-importScripts('noise.js?v=59', 'blocks.js?v=76', 'world.js?v=74', 'mesher.js?v=60');
+importScripts('noise.js?v=59', 'blocks.js?v=76', 'world.js?v=75', 'mesher.js?v=60');
 
 let world = null;
 const key = (cx, cz) => cx + ',' + cz;
@@ -17,6 +17,8 @@ self.onmessage = event => {
         cx: job.cx, cz: job.cz,
         blocks: new Uint8Array(16 * 16 * MC.WORLD.HEIGHT), generated: false
       };
+      // 先算好这一格附近的小建筑选址，再生成区块，避免随机建筑时有时无。
+      if (world.planRandomAround) world.planRandomAround(job.cx, job.cz, 1);
       world.generate(chunk);
       self.postMessage({ type: 'generate', cx: job.cx, cz: job.cz,
         blocks: chunk.blocks.buffer }, [chunk.blocks.buffer]);
